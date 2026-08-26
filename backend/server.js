@@ -28,6 +28,13 @@ app.use(
 app.use(express.json());
 connectDB();
 
+// A friendly root route — mainly so a browser visit or an uptime/keep-alive
+// ping has something to see other than Express's default "Cannot GET /"
+// (this API otherwise only serves the /api/v1/* routes below).
+app.get("/", (req, res) => {
+  res.json({ status: "ok", message: "Pocketly API is running" });
+});
+
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/income", incomeRoutes);
 app.use("/api/v1/expense", expenseRoutes);
