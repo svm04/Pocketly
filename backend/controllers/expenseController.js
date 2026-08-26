@@ -27,6 +27,30 @@ const buildCategoryFilter = (req) => {
   return { category: { $regex: `^${escapeRegex(req.query.category.trim())}$`, $options: "i" } };
 };
 
+// One-time-per-boot migration: categories saved before addExpense/
+// updateExpense trimmed on write (or entered via any other path) can carry
+// stray leading/trailing whitespace — invisible in the UI, but enough to
+// make "Groceries" and "Groceries " group as two separate slices in every
+// category-based chart/lookup, since $toLower alone doesn't touch
+// whitespace. Trims both Expense and Budget categories in place; only
+// touches documents that actually need it, and is a no-op on repeat runs.
+exports.backfillCategoryWhitespace = async () => {
+  const dirtyFilter = { category: { $regex: "(^\\s)|(\\s$)" } };
+  const trimUpdate = [{ $set: { category: { $trim: { input: "$category" } } } }];
+
+  const [expenseResult, budgetResult] = await Promise.all([
+    Expense.updateMany(dirtyFilter, trimUpdate),
+    Budget.updateMany(dirtyFilter, trimUpdate),
+  ]);
+
+  const total = (expenseResult.modifiedCount || 0) + (budgetResult.modifiedCount || 0);
+  if (total > 0) {
+    console.log(
+      `[expense] Trimmed whitespace from ${expenseResult.modifiedCount} expense categor${expenseResult.modifiedCount === 1 ? "y" : "ies"} and ${budgetResult.modifiedCount} budget categor${budgetResult.modifiedCount === 1 ? "y" : "ies"}`
+    );
+  }
+};
+
 //add expense source
 exports.addExpense = async (req, res) => {
   const userId = req.user.id;

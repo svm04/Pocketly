@@ -462,12 +462,12 @@ const buildMonthReportSheet = (workbook, year, month, expenses, incomes, budgets
     // Case-insensitive so a budget matches its expenses regardless of how
     // each was typed (e.g. "Groceries" budget vs "groceries" expenses).
     const spendMap = expenses.reduce((acc, e) => {
-      const key = (e.category || "").toLowerCase();
+      const key = (e.category || "").trim().toLowerCase();
       acc[key] = (acc[key] || 0) + e.amount;
       return acc;
     }, {});
     budgets.forEach((b) => {
-      const spent = spendMap[(b.category || "").toLowerCase()] || 0;
+      const spent = spendMap[(b.category || "").trim().toLowerCase()] || 0;
       const percentUsed = b.monthlyLimit ? spent / b.monthlyLimit : 0;
       const status = percentUsed >= 1 ? "Over" : percentUsed >= 0.8 ? "Warning" : "OK";
 

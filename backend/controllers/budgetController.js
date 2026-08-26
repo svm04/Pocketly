@@ -140,10 +140,11 @@ exports.getBudgetStatus = async (req, res) => {
 
     const budgets = await Budget.find({ userId, year, month }).sort({ category: 1 });
 
-    // Grouped case-insensitively so a budget category matches its expenses
-    // regardless of how each was typed before the category picker existed
-    // (e.g. a "Groceries" budget previously never matched "groceries"
-    // expenses and silently showed $0 spent).
+    // Grouped case- and whitespace-insensitively so a budget category
+    // matches its expenses regardless of how each was typed before the
+    // category picker existed (e.g. a "Groceries" budget previously never
+    // matched "groceries" or "Groceries " expenses and silently showed $0
+    // spent).
     const spendByCategory = await Expense.aggregate([
       {
         $match: {
@@ -151,7 +152,12 @@ exports.getBudgetStatus = async (req, res) => {
           date: { $gte: start, $lt: end },
         },
       },
-      { $group: { _id: { $toLower: "$category" }, total: { $sum: "$amount" } } },
+      {
+        $group: {
+          _id: { $toLower: { $trim: { input: "$category" } } },
+          total: { $sum: "$amount" },
+        },
+      },
     ]);
 
     const spendMap = spendByCategory.reduce((acc, item) => {
@@ -160,7 +166,7 @@ exports.getBudgetStatus = async (req, res) => {
     }, {});
 
     const result = budgets.map((budget) => {
-      const spent = spendMap[budget.category.toLowerCase()] || 0;
+      const spent = spendMap[budget.category.trim().toLowerCase()] || 0;
       const percentUsed = budget.monthlyLimit
         ? Math.round((spent / budget.monthlyLimit) * 100)
         : 0;
@@ -214,10 +220,12 @@ exports.copyBudgetsForward = async (req, res) => {
       { userId, year: toYear, month: toMonth },
       "category"
     );
-    const existingCategories = new Set(existingTarget.map((b) => b.category.toLowerCase()));
+    const existingCategories = new Set(
+      existingTarget.map((b) => b.category.trim().toLowerCase())
+    );
 
     const toCreate = sourceBudgets
-      .filter((b) => !existingCategories.has(b.category.toLowerCase()))
+      .filter((b) => !existingCategories.has(b.category.trim().toLowerCase()))
       .map((b) => ({
         userId,
         category: b.category,
@@ -229,7 +237,7 @@ exports.copyBudgetsForward = async (req, res) => {
 
     const created = toCreate.length > 0 ? await Budget.insertMany(toCreate) : [];
     const skipped = sourceBudgets
-      .filter((b) => existingCategories.has(b.category.toLowerCase()))
+      .filter((b) => existingCategories.has(b.category.trim().toLowerCase()))
       .map((b) => b.category);
 
     res.status(201).json({ created, skipped });

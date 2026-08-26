@@ -15,6 +15,7 @@ const transactionRoutes = require("./routes/transactionRoutes");
 const monthlyRolloverRoutes = require("./routes/monthlyRolloverRoutes");
 const { processDueRecurring } = require("./controllers/recurringController");
 const { backfillLegacyBudgets } = require("./controllers/budgetController");
+const { backfillCategoryWhitespace } = require("./controllers/expenseController");
 const { catchUpMonthlyRollover } = require("./controllers/monthlyRolloverController");
 
 const app = express();
@@ -68,6 +69,13 @@ app.listen(PORT, () => {
   // and make sure the new per-month unique index is in place.
   backfillLegacyBudgets().catch((err) =>
     console.error("[budget] Backfill failed:", err.message)
+  );
+
+  // One-time-per-boot cleanup: trims stray whitespace off existing
+  // Expense/Budget category values so a category can't silently split into
+  // two chart slices/budget mismatches (see backfillCategoryWhitespace).
+  backfillCategoryWhitespace().catch((err) =>
+    console.error("[expense] Category whitespace backfill failed:", err.message)
   );
 
   // Close out any fully-elapsed month that hasn't been closed yet — same

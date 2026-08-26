@@ -12,7 +12,7 @@ const BudgetSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    category: { type: String, required: true },
+    category: { type: String, required: true, trim: true },
     icon: { type: String, default: "" },
     monthlyLimit: { type: Number, required: true, min: 0 },
     year: { type: Number, required: true },

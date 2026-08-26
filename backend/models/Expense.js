@@ -8,7 +8,7 @@ const ExpenseSchema = new mongoose.Schema(
       required: true,
     },
     icon: { type: String, default: "" },
-    category: { type: String, required: true },
+    category: { type: String, required: true, trim: true },
     // Optional free-text note for this specific expense, e.g. "Dinner -
     // Uber Eats" filed under the "Food" category. Purely descriptive —
     // never used for grouping/matching, so it can't split a category into

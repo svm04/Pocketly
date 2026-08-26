@@ -47,8 +47,8 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
       { $match: { userId: userObjectId, date: { $gte: start, $lt: end } } },
       {
         $group: {
-          _id: { $toLower: "$category" },
-          category: { $first: "$category" },
+          _id: { $toLower: { $trim: { input: "$category" } } },
+          category: { $first: { $trim: { input: "$category" } } },
           total: { $sum: "$amount" },
         },
       },
@@ -73,7 +73,7 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
   }, {});
 
   const budgetSnapshots = budgets.map((b) => {
-    const spent = spendMap[b.category.toLowerCase()] || 0;
+    const spent = spendMap[b.category.trim().toLowerCase()] || 0;
     const percentUsed = b.monthlyLimit ? Math.round((spent / b.monthlyLimit) * 100) : 0;
     return {
       category: b.category,
@@ -111,9 +111,9 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
   if (budgets.length > 0) {
     const { year: nYear, month: nMonth } = nextMonth({ year, month });
     const existingNext = await Budget.find({ userId, year: nYear, month: nMonth }, "category");
-    const existingCats = new Set(existingNext.map((b) => b.category.toLowerCase()));
+    const existingCats = new Set(existingNext.map((b) => b.category.trim().toLowerCase()));
     const toCreate = budgets
-      .filter((b) => !existingCats.has(b.category.toLowerCase()))
+      .filter((b) => !existingCats.has(b.category.trim().toLowerCase()))
       .map((b) => ({
         userId,
         category: b.category,
