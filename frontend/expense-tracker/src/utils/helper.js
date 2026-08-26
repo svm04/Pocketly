@@ -1,0 +1,53 @@
+import moment from "moment";
+
+export const validateEmail = (email) => {
+  const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return regex.test(email);
+};
+
+// Adds thousands separators to a number, e.g. 1234567 -> "12,34,567" style not required;
+// we use a plain comma-grouped format: 1234567.5 -> "1,234,567.50"
+export const addThousandsSeparator = (num) => {
+  if (num === null || num === undefined || isNaN(num)) return "";
+  const [integerPart, fractionPart] = num.toString().split(".");
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fractionPart
+    ? `${formattedInteger}.${fractionPart}`
+    : formattedInteger;
+};
+
+export const getInitials = (name) => {
+  if (!name) return "";
+  const words = name.split(" ");
+  let initials = "";
+  for (let i = 0; i < Math.min(words.length, 2); i++) {
+    if (words[i]) initials += words[i][0];
+  }
+  return initials.toUpperCase();
+};
+
+// Groups income transactions by day for a line chart
+export const prepareIncomeLineChartData = (transactions = []) => {
+  const sorted = [...transactions].sort(
+    (a, b) => new Date(a.date) - new Date(b.date)
+  );
+
+  return sorted.map((txn) => ({
+    month: moment(txn.date).format("Do MMM"),
+    amount: txn.amount,
+    source: txn.source,
+  }));
+};
+
+// Groups expense transactions by day for a bar chart
+export const prepareExpenseBarChartData = (transactions = []) => {
+  const sorted = [...transactions].sort(
+    (a, b) => new Date(a.date) - new Date(b.date)
+  );
+
+  return sorted.map((txn) => ({
+    month: moment(txn.date).format("Do MMM"),
+    amount: txn.amount,
+    category: txn.category,
+  }));
+};

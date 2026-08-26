@@ -1,0 +1,54 @@
+import React from "react";
+import { LuDownload } from "react-icons/lu";
+import TransactionInfoCard from "../Cards/TransactionInfoCard";
+import Pagination from "../Pagination";
+
+const ExpenseList = ({
+  transactions,
+  onDelete,
+  onEdit,
+  onDownload,
+  currentPage,
+  totalPages,
+  onPageChange,
+}) => {
+  return (
+    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-md shadow-gray-100 border border-gray-200/50 dark:border-gray-700/50 p-6">
+      <div className="flex items-center justify-between">
+        <h5 className="text-lg font-medium dark:text-gray-100">Expense Sources</h5>
+
+        <button className="card-btn" onClick={onDownload}>
+          <LuDownload className="text-base" /> Download
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 mt-6">
+        {transactions?.length === 0 && (
+          <p className="text-sm text-gray-400 dark:text-gray-500 col-span-2">
+            No expenses added yet.
+          </p>
+        )}
+        {transactions?.map((expense) => (
+          <TransactionInfoCard
+            key={expense._id}
+            title={expense.category}
+            icon={expense.icon}
+            date={expense.date}
+            amount={expense.amount}
+            type="expense"
+            onDelete={() => onDelete(expense._id)}
+            onEdit={() => onEdit(expense)}
+          />
+        ))}
+      </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+      />
+    </div>
+  );
+};
+
+export default ExpenseList;
