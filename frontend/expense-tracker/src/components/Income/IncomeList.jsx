@@ -13,7 +13,7 @@ const IncomeList = ({
   onPageChange,
 }) => {
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-md shadow-gray-100 border border-gray-200/50 dark:border-gray-700/50 p-6">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-md shadow-gray-100 dark:shadow-none p-6">
       <div className="flex items-center justify-between">
         <h5 className="text-lg font-medium dark:text-gray-100">Income Sources</h5>
 

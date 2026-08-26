@@ -154,7 +154,7 @@ const Expense = () => {
 
   return (
     <DashboardLayout activeMenu="Expense">
-      <div className="my-5 mx-auto">
+      <div className="my-5 mx-auto space-y-6">
         <div className="grid grid-cols-1 gap-6">
           <ExpenseOverview
             transactions={chartTransactions}

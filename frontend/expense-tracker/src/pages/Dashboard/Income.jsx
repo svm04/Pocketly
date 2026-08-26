@@ -156,7 +156,7 @@ const Income = () => {
 
   return (
     <DashboardLayout activeMenu="Income">
-      <div className="my-5 mx-auto">
+      <div className="my-5 mx-auto space-y-6">
         <div className="grid grid-cols-1 gap-6">
           <IncomeOverview
             transactions={chartTransactions}
