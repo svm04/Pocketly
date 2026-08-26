@@ -154,11 +154,18 @@ exports.getExpenseMonthlySummary = async (req, res) => {
 
 // Every category the user has ever used — from an actual expense, or just
 // a budget set up for it (in case an expense hasn't landed there yet) —
-// each with its most recently-seen icon, deduped case-insensitively.
+// each with its most recently-seen icon, deduped case-insensitively (and
+// whitespace-insensitively, so "Rent" and "Rent " collapse into one entry
+// instead of showing up as two near-identical suggestions).
 // Powers the category picker in Add/Edit Expense so new entries reuse an
 // existing category's exact spelling/casing instead of drifting into
 // near-duplicates like "Groceries" vs "groceries" that would otherwise
 // split apart in the breakdown charts.
+//
+// Auto-generated "Savings: <goal name>" categories (posted automatically
+// by contributeToGoal when money moves into a savings goal) are excluded
+// from the list — that's bookkeeping the app creates for you, not a
+// category someone should be manually picking for a new expense.
 exports.getExpenseCategories = async (req, res) => {
   const userId = req.user.id;
   try {
@@ -174,12 +181,15 @@ exports.getExpenseCategories = async (req, res) => {
       ]),
     ]);
 
-    const merged = new Map(); // lowercase category -> { category, icon }
+    const merged = new Map(); // trimmed-lowercase category -> { category, icon }
     [...expenseCats, ...budgetCats].forEach((c) => {
-      if (!c._id) return;
-      const key = c._id.toLowerCase();
+      const trimmed = c._id?.trim();
+      if (!trimmed) return;
+      if (/^savings:/i.test(trimmed)) return;
+
+      const key = trimmed.toLowerCase();
       if (!merged.has(key)) {
-        merged.set(key, { category: c._id, icon: c.icon || "" });
+        merged.set(key, { category: trimmed, icon: c.icon || "" });
       } else if (!merged.get(key).icon && c.icon) {
         merged.get(key).icon = c.icon;
       }
