@@ -28,14 +28,26 @@ router.post("/reset-password/:token", resetPassword);
 router.put("/profile", protect, updateProfile);
 router.put("/change-password", protect, changePassword);
 
-router.post("/upload-image", upload.single("image"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No file uploaded" });
-  }
-  const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${
-    req.file.filename
-  }`;
-  res.status(200).json({ imageUrl });
+router.post("/upload-image", (req, res) => {
+  upload.single("image")(req, res, (err) => {
+    if (err) {
+      const message =
+        err.code === "LIMIT_FILE_SIZE"
+          ? "Image is too large. Please choose a file under 2MB."
+          : err.message || "Upload failed.";
+      return res.status(400).json({ message });
+    }
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+    // Data URI (e.g. "data:image/png;base64,...") — works as an <img src>
+    // directly in the browser, and is stored on the user document in
+    // MongoDB instead of on the server's local (non-persistent) disk.
+    const imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString(
+      "base64"
+    )}`;
+    res.status(200).json({ imageUrl });
+  });
 });
 
 module.exports = router;
