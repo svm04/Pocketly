@@ -53,6 +53,10 @@ export const API_PATHS = {
     TOGGLE_RECURRING: (id) => `/api/v1/recurring/${id}/toggle`,
     DELETE_RECURRING: (id) => `/api/v1/recurring/${id}`,
   },
+  MONTHLY_ROLLOVER: {
+    START_NEW_MONTH: "/api/v1/monthly-rollover/start-new-month",
+    GET_SUMMARY: "/api/v1/monthly-rollover/summary",
+  },
   GOALS: {
     ADD_GOAL: "/api/v1/goals/add",
     GET_ALL_GOALS: "/api/v1/goals/get",

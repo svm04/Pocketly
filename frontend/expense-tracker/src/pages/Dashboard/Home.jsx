@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { LuHandCoins, LuWalletMinimal, LuFileSpreadsheet } from "react-icons/lu";
+import { LuHandCoins, LuWalletMinimal, LuFileSpreadsheet, LuCalendarPlus } from "react-icons/lu";
 import { IoMdCard } from "react-icons/io";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
@@ -11,9 +11,17 @@ import InfoCard from "../../components/Cards/InfoCard";
 import RecentTransactions from "../../components/Dashboard/RecentTransactions";
 import FinanceOverview from "../../components/Dashboard/FinanceOverview";
 import BreakdownCard from "../../components/Dashboard/BreakdownCard";
+import LastMonthRecap from "../../components/Dashboard/LastMonthRecap";
 import BudgetAlerts from "../../components/Dashboard/BudgetAlerts";
 import GoalsSummary from "../../components/Dashboard/GoalsSummary";
 import PeriodSelector from "../../components/PeriodSelector";
+import Modal from "../../components/Modal";
+import ConfirmAlert from "../../components/ConfirmAlert";
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 const Home = () => {
   useUserAuth();
@@ -28,6 +36,9 @@ const Home = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [showStartMonthConfirm, setShowStartMonthConfirm] = useState(false);
+  const [startingMonth, setStartingMonth] = useState(false);
+  const [recapRefreshKey, setRecapRefreshKey] = useState(0);
 
   const handleExportReport = async () => {
     if (exporting) return;
@@ -44,6 +55,23 @@ const Home = () => {
       toast.error("Failed to export report. Please try again.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleStartNewMonth = async () => {
+    if (startingMonth) return;
+    setStartingMonth(true);
+    try {
+      await axiosInstance.post(API_PATHS.MONTHLY_ROLLOVER.START_NEW_MONTH);
+      toast.success("Month closed out — budgets copied forward.");
+      setShowStartMonthConfirm(false);
+      setRecapRefreshKey((k) => k + 1);
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error starting new month:", error);
+      toast.error(error.response?.data?.message || "Failed to start new month");
+    } finally {
+      setStartingMonth(false);
     }
   };
 
@@ -67,7 +95,6 @@ const Home = () => {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period.mode, period.month, period.year]);
@@ -86,6 +113,13 @@ const Home = () => {
             />
             <button
               type="button"
+              className="card-btn"
+              onClick={() => setShowStartMonthConfirm(true)}
+            >
+              <LuCalendarPlus className="text-base" /> Start New Month
+            </button>
+            <button
+              type="button"
               className="add-btn"
               onClick={handleExportReport}
               disabled={exporting}
@@ -95,6 +129,8 @@ const Home = () => {
             </button>
           </div>
         </div>
+
+        <LastMonthRecap refreshKey={recapRefreshKey} />
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <InfoCard
@@ -156,6 +192,21 @@ const Home = () => {
 
           <GoalsSummary />
         </div>
+
+        <Modal
+          isOpen={showStartMonthConfirm}
+          onClose={() => setShowStartMonthConfirm(false)}
+          title="Start New Month"
+        >
+          <ConfirmAlert
+            content={`This closes out ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()} — a snapshot of this month's totals and budget performance is saved, and this month's budgets are copied forward into ${
+              MONTH_NAMES[(now.getMonth() + 1) % 12]
+            }. You can keep adding transactions to this month afterward; running this again just refreshes the snapshot.`}
+            confirmLabel="Start New Month"
+            busy={startingMonth}
+            onConfirm={handleStartNewMonth}
+          />
+        </Modal>
       </div>
     </DashboardLayout>
   );

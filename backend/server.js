@@ -12,8 +12,10 @@ const budgetRoutes = require("./routes/budgetRoutes");
 const recurringRoutes = require("./routes/recurringRoutes");
 const savingsGoalRoutes = require("./routes/savingsGoalRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
+const monthlyRolloverRoutes = require("./routes/monthlyRolloverRoutes");
 const { processDueRecurring } = require("./controllers/recurringController");
 const { backfillLegacyBudgets } = require("./controllers/budgetController");
+const { catchUpMonthlyRollover } = require("./controllers/monthlyRolloverController");
 
 const app = express();
 
@@ -47,6 +49,7 @@ app.use("/api/v1/budget", budgetRoutes);
 app.use("/api/v1/recurring", recurringRoutes);
 app.use("/api/v1/goals", savingsGoalRoutes);
 app.use("/api/v1/transactions", transactionRoutes);
+app.use("/api/v1/monthly-rollover", monthlyRolloverRoutes);
 
 // Serve static files from the uploads directory
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
@@ -67,9 +70,20 @@ app.listen(PORT, () => {
     console.error("[budget] Backfill failed:", err.message)
   );
 
+  // Close out any fully-elapsed month that hasn't been closed yet — same
+  // "catch up on whatever we missed while asleep" reasoning as the
+  // recurring-transactions job above, since a free-tier server can easily
+  // sleep straight through the 1st of the month.
+  catchUpMonthlyRollover().catch((err) =>
+    console.error("[monthly-rollover] Startup catch-up failed:", err.message)
+  );
+
   cron.schedule("5 0 * * *", () => {
     processDueRecurring().catch((err) =>
       console.error("[recurring] Scheduled run failed:", err.message)
+    );
+    catchUpMonthlyRollover().catch((err) =>
+      console.error("[monthly-rollover] Scheduled run failed:", err.message)
     );
   });
 });
