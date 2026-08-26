@@ -34,6 +34,7 @@ exports.addExpense = async (req, res) => {
   try {
     const { icon, amount, date } = req.body;
     const category = req.body.category?.trim();
+    const description = req.body.description?.trim() || "";
 
     //validation: missing fields
     if (!category || !amount || !date) {
@@ -46,6 +47,7 @@ exports.addExpense = async (req, res) => {
       userId,
       icon,
       category,
+      description,
       amount,
       date: new Date(date),
     });
@@ -69,6 +71,7 @@ exports.updateExpense = async (req, res) => {
 
     const { icon, amount, date } = req.body;
     const category = req.body.category?.trim();
+    const description = req.body.description?.trim() || "";
 
     if (!category || !amount || !date) {
       return res
@@ -78,6 +81,7 @@ exports.updateExpense = async (req, res) => {
 
     expense.icon = icon;
     expense.category = category;
+    expense.description = description;
     expense.amount = amount;
     expense.date = new Date(date);
 
@@ -228,6 +232,7 @@ exports.downloadExpenseExcel = async (req, res) => {
     //prepare excel data
     const data = expense.map((item) => ({
       Category: item.category,
+      Description: item.description || "",
       Amount: item.amount,
       Date: item.date,
     }));

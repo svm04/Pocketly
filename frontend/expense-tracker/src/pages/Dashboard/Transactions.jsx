@@ -138,6 +138,7 @@ const Transactions = () => {
               <TransactionInfoCard
                 key={txn._id}
                 title={txn.title}
+                subtitle={txn.type === "expense" ? txn.description : ""}
                 icon={txn.icon}
                 date={txn.date}
                 amount={txn.amount}

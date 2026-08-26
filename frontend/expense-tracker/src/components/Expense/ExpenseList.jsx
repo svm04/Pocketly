@@ -32,6 +32,7 @@ const ExpenseList = ({
           <TransactionInfoCard
             key={expense._id}
             title={expense.category}
+            subtitle={expense.description}
             icon={expense.icon}
             date={expense.date}
             amount={expense.amount}

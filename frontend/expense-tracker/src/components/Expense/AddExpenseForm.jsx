@@ -8,6 +8,7 @@ const AddExpenseForm = ({ onAddExpense, initialData }) => {
 
   const [expense, setExpense] = useState({
     category: initialData?.category || "",
+    description: initialData?.description || "",
     amount: initialData?.amount ?? "",
     date: initialData?.date ? initialData.date.substring(0, 10) : "",
     icon: initialData?.icon || "",
@@ -37,6 +38,14 @@ const AddExpenseForm = ({ onAddExpense, initialData }) => {
         }}
         label="Category"
         placeholder="Rent, Groceries, etc"
+      />
+
+      <Input
+        value={expense.description}
+        onChange={({ target }) => handleChange("description", target.value)}
+        label="Description (optional)"
+        placeholder="e.g. Dinner - Uber Eats"
+        type="text"
       />
 
       <Input

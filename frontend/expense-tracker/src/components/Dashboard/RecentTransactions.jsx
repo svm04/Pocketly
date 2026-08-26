@@ -24,6 +24,7 @@ const RecentTransactions = ({ transactions }) => {
           <TransactionInfoCard
             key={item._id}
             title={item.type === "income" ? item.source : item.category}
+            subtitle={item.type === "expense" ? item.description : ""}
             icon={item.icon}
             date={item.date}
             amount={item.amount}
