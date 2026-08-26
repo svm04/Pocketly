@@ -10,9 +10,7 @@ import { downloadBlob } from "../../utils/downloadFile";
 import InfoCard from "../../components/Cards/InfoCard";
 import RecentTransactions from "../../components/Dashboard/RecentTransactions";
 import FinanceOverview from "../../components/Dashboard/FinanceOverview";
-import ExpenseTransactions from "../../components/Dashboard/ExpenseTransactions";
-import Last30DaysExpenses from "../../components/Dashboard/Last30DaysExpenses";
-import RecentIncomeWithChart from "../../components/Dashboard/RecentIncomeWithChart";
+import BreakdownCard from "../../components/Dashboard/BreakdownCard";
 import BudgetAlerts from "../../components/Dashboard/BudgetAlerts";
 import GoalsSummary from "../../components/Dashboard/GoalsSummary";
 import PeriodSelector from "../../components/PeriodSelector";
@@ -132,17 +130,26 @@ const Home = () => {
             totalExpense={dashboardData?.totalExpense || 0}
           />
 
-          <ExpenseTransactions
-            transactions={dashboardData?.last30DaysExpenses?.transactions}
+          <BreakdownCard
+            title={`Expense Breakdown — ${
+              period.mode === "year" ? period.year : `This Month`
+            }`}
+            items={(dashboardData?.expenseByCategory || []).map((c) => ({
+              label: c.category,
+              total: c.total,
+            }))}
+            emptyMessage="No expenses recorded for this period yet."
           />
 
-          <Last30DaysExpenses
-            transactions={dashboardData?.last30DaysExpenses?.transactions}
-          />
-
-          <RecentIncomeWithChart
-            data={dashboardData?.last60DaysIncome?.transactions?.slice(0, 4)}
-            totalIncome={dashboardData?.totalIncome || 0}
+          <BreakdownCard
+            title={`Income Breakdown — ${
+              period.mode === "year" ? period.year : `This Month`
+            }`}
+            items={(dashboardData?.incomeBySource || []).map((s) => ({
+              label: s.source,
+              total: s.total,
+            }))}
+            emptyMessage="No income recorded for this period yet."
           />
 
           <BudgetAlerts />
