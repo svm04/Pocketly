@@ -144,6 +144,70 @@ const buildTransactionSheet = (workbook, name, rows, labelKey, labelHeader, note
   return sheet;
 };
 
+// Chronological, running-balance ledger of every income + expense passed
+// in (ascending-date balance math, then flipped to newest-first for
+// display) — shared by the all-time export and the combined yearly
+// report below so the two don't drift out of sync with each other.
+const buildAllTransactionsSheet = (workbook, incomes, expenses) => {
+  const chronological = [
+    ...incomes.map((i) => ({
+      date: i.date,
+      icon: i.icon,
+      label: i.source,
+      note: "",
+      type: "Income",
+      amount: i.amount,
+    })),
+    ...expenses.map((e) => ({
+      date: e.date,
+      icon: e.icon,
+      label: e.category,
+      note: e.description || "",
+      type: "Expense",
+      amount: -e.amount,
+    })),
+  ].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  let runningBalance = 0;
+  const withBalance = chronological.map((t) => {
+    runningBalance += t.amount;
+    return { ...t, balance: runningBalance };
+  });
+  const allTxns = [...withBalance].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const allSheet = workbook.addWorksheet("All Transactions");
+  allSheet.columns = [
+    { header: "Date", key: "date", width: 14 },
+    { header: "Type", key: "type", width: 12 },
+    { header: "Icon", key: "icon", width: 8 },
+    { header: "Description", key: "label", width: 26 },
+    { header: "Notes", key: "note", width: 28 },
+    { header: "Amount", key: "amount", width: 16 },
+    { header: "Balance", key: "balance", width: 16 },
+  ];
+  styleHeaderRow(allSheet);
+  allTxns.forEach((t) => {
+    const row = allSheet.addRow({
+      date: new Date(t.date).toLocaleDateString(),
+      type: t.type,
+      icon: t.icon || "",
+      label: t.label,
+      note: t.note || "",
+      amount: t.amount,
+      balance: t.balance,
+    });
+    row.getCell("icon").alignment = { horizontal: "center" };
+    row.getCell("amount").font = { color: { argb: t.amount >= 0 ? GREEN : RED } };
+    row.eachCell((cell) => {
+      cell.border = { bottom: GRID_LINE };
+    });
+  });
+  allSheet.getColumn("amount").numFmt = CURRENCY_FMT;
+  allSheet.getColumn("balance").numFmt = CURRENCY_FMT;
+  allSheet.views = [{ state: "frozen", ySplit: 1 }];
+  return allSheet;
+};
+
 // Builds a full, nicely-formatted Excel workbook (Summary + Income +
 // Expenses + a combined All Transactions sheet) and streams it straight to
 // the response — no temp file on disk, so concurrent exports from
@@ -210,66 +274,7 @@ exports.exportTransactionsExcel = async (req, res) => {
 
     buildTransactionSheet(workbook, "Income", incomes, "source", "Source");
     buildTransactionSheet(workbook, "Expenses", expenses, "category", "Category", "description");
-
-    // ---- Combined, chronological sheet with a running balance ----
-    // Compute the running balance in ascending date order (how the balance
-    // actually accrued over time), then flip to newest-first for display.
-    const chronological = [
-      ...incomes.map((i) => ({
-        date: i.date,
-        icon: i.icon,
-        label: i.source,
-        note: "",
-        type: "Income",
-        amount: i.amount,
-      })),
-      ...expenses.map((e) => ({
-        date: e.date,
-        icon: e.icon,
-        label: e.category,
-        note: e.description || "",
-        type: "Expense",
-        amount: -e.amount,
-      })),
-    ].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    let runningBalance = 0;
-    const withBalance = chronological.map((t) => {
-      runningBalance += t.amount;
-      return { ...t, balance: runningBalance };
-    });
-    const allTxns = [...withBalance].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    const allSheet = workbook.addWorksheet("All Transactions");
-    allSheet.columns = [
-      { header: "Date", key: "date", width: 14 },
-      { header: "Type", key: "type", width: 12 },
-      { header: "Icon", key: "icon", width: 8 },
-      { header: "Description", key: "label", width: 26 },
-      { header: "Notes", key: "note", width: 28 },
-      { header: "Amount", key: "amount", width: 16 },
-      { header: "Balance", key: "balance", width: 16 },
-    ];
-    styleHeaderRow(allSheet);
-    allTxns.forEach((t) => {
-      const row = allSheet.addRow({
-        date: new Date(t.date).toLocaleDateString(),
-        type: t.type,
-        icon: t.icon || "",
-        label: t.label,
-        note: t.note || "",
-        amount: t.amount,
-        balance: t.balance,
-      });
-      row.getCell("icon").alignment = { horizontal: "center" };
-      row.getCell("amount").font = { color: { argb: t.amount >= 0 ? GREEN : RED } };
-      row.eachCell((cell) => {
-        cell.border = { bottom: GRID_LINE };
-      });
-    });
-    allSheet.getColumn("amount").numFmt = CURRENCY_FMT;
-    allSheet.getColumn("balance").numFmt = CURRENCY_FMT;
-    allSheet.views = [{ state: "frozen", ySplit: 1 }];
+    buildAllTransactionsSheet(workbook, incomes, expenses);
 
     const filename = `Pocketly-Report-${new Date().toISOString().slice(0, 10)}.xlsx`;
     res.setHeader(
@@ -346,51 +351,108 @@ exports.getAllTransactions = async (req, res) => {
   }
 };
 
-// ---- Monthly Report export ----
-// Mirrors a typical "one sheet per month" manual budgeting spreadsheet: a
-// Summary sheet with every month's income/expense/net for the year, plus
-// one detailed sheet per month. Unlike a manual spreadsheet, each month
-// sheet also gets a Budget vs Actual table, since Pocketly actually knows
-// what was budgeted.
+// ---- Combined yearly report ----
+// One button, one workbook: the year-at-a-glance summary + full Income/
+// Expenses ledgers (with breakdowns) + a running-balance All Transactions
+// sheet, PLUS the one-sheet-per-month budgeting detail that used to be a
+// separate "Monthly Report" download. Replaces what were previously two
+// buttons/exports on the Dashboard.
 
-const buildYearSummarySheet = (workbook, year, monthlyTotals) => {
+// Summary sheet: overview stats (same set the old standalone "Export
+// Report" showed, just scoped to this year instead of all-time) on top,
+// then the month-by-month Income/Expense/Net grid underneath.
+const buildYearSummarySheet = (workbook, year, monthlyTotals, incomes, expenses) => {
   const sheet = workbook.addWorksheet("Summary");
-  sheet.columns = [
-    { header: "Month", key: "month", width: 18 },
-    { header: "Income", key: "income", width: 16 },
-    { header: "Expense", key: "expense", width: 16 },
-    { header: "Net Savings", key: "net", width: 16 },
-  ];
-  styleHeaderRow(sheet);
+  sheet.columns = [{ width: 24 }, { width: 18 }, { width: 16 }, { width: 16 }];
+
+  const totalIncome = incomes.reduce((s, i) => s + i.amount, 0);
+  const totalExpense = expenses.reduce((s, e) => s + e.amount, 0);
+  const balance = totalIncome - totalExpense;
+  const avgIncome = incomes.length > 0 ? totalIncome / incomes.length : 0;
+  const avgExpense = expenses.length > 0 ? totalExpense / expenses.length : 0;
+  const allDates = [...incomes, ...expenses].map((t) => new Date(t.date));
+  const earliest = allDates.length
+    ? new Date(Math.min(...allDates)).toLocaleDateString()
+    : "—";
+  const latest = allDates.length
+    ? new Date(Math.max(...allDates)).toLocaleDateString()
+    : "—";
+
+  let row = 1;
+  const writeStat = (label, value, opts = {}) => {
+    sheet.getCell(row, 1).value = label;
+    sheet.getCell(row, 1).font = { bold: true };
+    const cell = sheet.getCell(row, 2);
+    cell.value = value;
+    if (opts.currency) cell.numFmt = CURRENCY_FMT;
+    cell.font = opts.color ? { bold: true, color: { argb: opts.color } } : { bold: true };
+    row += 1;
+  };
+
+  writeStat(`Total Income (${year})`, totalIncome, { currency: true });
+  writeStat(`Total Expenses (${year})`, totalExpense, { currency: true });
+  writeStat("Net Balance", balance, { currency: true, color: balance >= 0 ? GREEN : RED });
+  row += 1;
+  writeStat("Income Entries", incomes.length);
+  writeStat("Expense Entries", expenses.length);
+  writeStat("Average Income / Entry", avgIncome, { currency: true });
+  writeStat("Average Expense / Entry", avgExpense, { currency: true });
+  row += 1;
+  writeStat("Earliest Transaction", earliest);
+  writeStat("Latest Transaction", latest);
+  writeStat("Report Generated", new Date().toLocaleString());
+  row += 2;
+
+  // ---- Month-by-month breakdown ----
+  sheet.getCell(row, 1).value = "Month-by-Month Breakdown";
+  sheet.getCell(row, 1).font = { bold: true, size: 12, color: { argb: BRAND } };
+  row += 1;
+
+  const headerRowIdx = row;
+  ["Month", "Income", "Expense", "Net Savings"].forEach((h, i) => {
+    const cell = sheet.getCell(headerRowIdx, i + 1);
+    cell.value = h;
+    cell.font = HEADER_FONT;
+    cell.fill = BRAND_FILL;
+  });
+  row += 1;
 
   monthlyTotals.forEach((m) => {
     const net = m.totalIncome - m.totalExpense;
-    const row = sheet.addRow({
-      month: `${MONTH_NAMES[m.month - 1]} ${year}`,
-      income: m.totalIncome,
-      expense: m.totalExpense,
-      net,
-    });
-    row.getCell("net").font = { color: { argb: net >= 0 ? GREEN : RED } };
+    sheet.getCell(row, 1).value = `${MONTH_NAMES[m.month - 1]} ${year}`;
+    const incCell = sheet.getCell(row, 2);
+    incCell.value = m.totalIncome;
+    incCell.numFmt = CURRENCY_FMT;
+    const expCell = sheet.getCell(row, 3);
+    expCell.value = m.totalExpense;
+    expCell.numFmt = CURRENCY_FMT;
+    const netCell = sheet.getCell(row, 4);
+    netCell.value = net;
+    netCell.numFmt = CURRENCY_FMT;
+    netCell.font = { color: { argb: net >= 0 ? GREEN : RED } };
+    row += 1;
   });
 
-  const totalIncome = monthlyTotals.reduce((s, m) => s + m.totalIncome, 0);
-  const totalExpense = monthlyTotals.reduce((s, m) => s + m.totalExpense, 0);
-  const totalRow = sheet.addRow({
-    month: "Total",
-    income: totalIncome,
-    expense: totalExpense,
-    net: totalIncome - totalExpense,
-  });
-  totalRow.font = { bold: true };
-  totalRow.eachCell((cell) => {
-    cell.border = { top: BRAND_LINE };
+  const totalRowIdx = row;
+  sheet.getCell(totalRowIdx, 1).value = "Total";
+  sheet.getCell(totalRowIdx, 1).font = { bold: true };
+  const tIncCell = sheet.getCell(totalRowIdx, 2);
+  tIncCell.value = totalIncome;
+  tIncCell.numFmt = CURRENCY_FMT;
+  tIncCell.font = { bold: true };
+  const tExpCell = sheet.getCell(totalRowIdx, 3);
+  tExpCell.value = totalExpense;
+  tExpCell.numFmt = CURRENCY_FMT;
+  tExpCell.font = { bold: true };
+  const tNetCell = sheet.getCell(totalRowIdx, 4);
+  tNetCell.value = balance;
+  tNetCell.numFmt = CURRENCY_FMT;
+  tNetCell.font = { bold: true };
+  [1, 2, 3, 4].forEach((c) => {
+    sheet.getCell(totalRowIdx, c).border = { top: BRAND_LINE };
   });
 
-  ["income", "expense", "net"].forEach((key) => {
-    sheet.getColumn(key).numFmt = CURRENCY_FMT;
-  });
-  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  sheet.views = [{ state: "frozen", ySplit: headerRowIdx }];
   return sheet;
 };
 
@@ -515,9 +577,15 @@ const buildMonthReportSheet = (workbook, year, month, expenses, incomes, budgets
   return sheet;
 };
 
-// Streams a full-year workbook: Summary + one sheet per month (Jan-Dec,
-// present even for months with no data yet, same as a template spreadsheet
-// laid out for the whole year in advance).
+// Streams the full-year workbook: Summary (overview stats + month-by-month
+// grid) + Income + Expenses (each with its breakdown table) + All
+// Transactions (running balance) + one sheet per month (Jan-Dec, present
+// even for months with no data yet, same as a template spreadsheet laid
+// out for the whole year in advance) with its own Budget vs Actual table.
+// This is the single combined download behind the Dashboard's one export
+// button — it used to be two separate exports/buttons ("Export Report"
+// and "Monthly Report"); this keeps every sheet either had, just all
+// scoped to one selected year instead of splitting across two downloads.
 exports.exportMonthlyReportExcel = async (req, res) => {
   const userId = req.user.id;
 
@@ -552,12 +620,15 @@ exports.exportMonthlyReportExcel = async (req, res) => {
       monthBreakdown.push({ month, monthIncomes, monthExpenses, monthBudgets });
     }
 
-    buildYearSummarySheet(workbook, year, monthlyTotals);
+    buildYearSummarySheet(workbook, year, monthlyTotals, allIncomes, allExpenses);
+    buildTransactionSheet(workbook, "Income", allIncomes, "source", "Source");
+    buildTransactionSheet(workbook, "Expenses", allExpenses, "category", "Category", "description");
+    buildAllTransactionsSheet(workbook, allIncomes, allExpenses);
     monthBreakdown.forEach(({ month, monthIncomes, monthExpenses, monthBudgets }) => {
       buildMonthReportSheet(workbook, year, month, monthExpenses, monthIncomes, monthBudgets);
     });
 
-    const filename = `Pocketly-Monthly-Report-${year}.xlsx`;
+    const filename = `Pocketly-Report-${year}.xlsx`;
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

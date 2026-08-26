@@ -4,7 +4,6 @@ import {
   LuWalletMinimal,
   LuFileSpreadsheet,
   LuCalendarPlus,
-  LuCalendarRange,
 } from "react-icons/lu";
 import { IoMdCard } from "react-icons/io";
 import toast from "react-hot-toast";
@@ -42,47 +41,31 @@ const Home = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [exportingMonthly, setExportingMonthly] = useState(false);
   const [showStartMonthConfirm, setShowStartMonthConfirm] = useState(false);
   const [startingMonth, setStartingMonth] = useState(false);
   const [recapRefreshKey, setRecapRefreshKey] = useState(0);
 
+  // Downloads the full-year workbook — overview + Income/Expenses ledgers
+  // with breakdowns + a running-balance All Transactions sheet + a
+  // one-sheet-per-month budgeting breakdown — for whichever year is
+  // currently selected. This used to be two separate downloads/buttons
+  // ("Export Report" and "Monthly Report"); they're combined into one
+  // since the year-scoped workbook now has everything either one did.
   const handleExportReport = async () => {
     if (exporting) return;
     setExporting(true);
     try {
-      const response = await axiosInstance.get(API_PATHS.TRANSACTIONS.EXPORT_EXCEL, {
-        responseType: "blob",
-      });
-      const today = new Date().toISOString().slice(0, 10);
-      downloadBlob(response.data, `Pocketly-Report-${today}.xlsx`);
+      const response = await axiosInstance.get(
+        `${API_PATHS.TRANSACTIONS.EXPORT_MONTHLY_REPORT}?year=${period.year}`,
+        { responseType: "blob" }
+      );
+      downloadBlob(response.data, `Pocketly-Report-${period.year}.xlsx`);
       toast.success("Report downloaded");
     } catch (error) {
       console.error("Error exporting report:", error);
       toast.error("Failed to export report. Please try again.");
     } finally {
       setExporting(false);
-    }
-  };
-
-  // Downloads the year-long, one-sheet-per-month budgeting workbook for
-  // whichever year is currently selected (falls back to this year when
-  // viewing in Monthly mode within the current year).
-  const handleExportMonthlyReport = async () => {
-    if (exportingMonthly) return;
-    setExportingMonthly(true);
-    try {
-      const response = await axiosInstance.get(
-        `${API_PATHS.TRANSACTIONS.EXPORT_MONTHLY_REPORT}?year=${period.year}`,
-        { responseType: "blob" }
-      );
-      downloadBlob(response.data, `Pocketly-Monthly-Report-${period.year}.xlsx`);
-      toast.success("Monthly report downloaded");
-    } catch (error) {
-      console.error("Error exporting monthly report:", error);
-      toast.error("Failed to export monthly report. Please try again.");
-    } finally {
-      setExportingMonthly(false);
     }
   };
 
@@ -148,21 +131,12 @@ const Home = () => {
             </button>
             <button
               type="button"
-              className="card-btn"
-              onClick={handleExportMonthlyReport}
-              disabled={exportingMonthly}
-            >
-              <LuCalendarRange className="text-base" />
-              {exportingMonthly ? "Preparing..." : `Monthly Report (${period.year})`}
-            </button>
-            <button
-              type="button"
               className="add-btn"
               onClick={handleExportReport}
               disabled={exporting}
             >
               <LuFileSpreadsheet className="text-base" />
-              {exporting ? "Preparing..." : "Export Report"}
+              {exporting ? "Preparing..." : `Export Report (${period.year})`}
             </button>
           </div>
         </div>
