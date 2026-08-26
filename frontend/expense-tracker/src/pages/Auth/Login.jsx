@@ -49,6 +49,10 @@ const Login = () => {
     } catch (error) {
       if (error.response && error.response.data.message) {
         setError(error.response.data.message);
+      } else if (error.code === "ECONNABORTED") {
+        setError(
+          "The server is waking up from sleep (free hosting tier) — this can take up to a minute. Please try again shortly."
+        );
       } else {
         setError("Something went wrong. Please try again later.");
       }

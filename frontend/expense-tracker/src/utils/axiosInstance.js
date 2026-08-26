@@ -3,7 +3,10 @@ import { BASE_URL, API_PATHS } from "./apiPaths";
 
 const axiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  // 60s (not the original 10s) so a cold start on free-tier hosting (Render
+  // can take 30-60s to wake a sleeping backend) doesn't get cut off
+  // client-side before the server even has a chance to respond.
+  timeout: 60000,
   headers: {
     "Content-Type": "application/json",
     Accept: "application/json",
