@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { LuPlus, LuPencil, LuTrash2 } from "react-icons/lu";
+import { LuPlus, LuPencil, LuTrash2, LuCopy } from "react-icons/lu";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
 import { useUserAuth } from "../../hooks/useUserAuth";
 import axiosInstance from "../../utils/axiosInstance";
@@ -9,19 +9,30 @@ import Modal from "../../components/Modal";
 import DeleteAlert from "../../components/DeleteAlert";
 import ProgressBar from "../../components/ProgressBar";
 import AddBudgetForm from "../../components/Budget/AddBudgetForm";
+import MonthStepper from "../../components/MonthStepper";
 import { addThousandsSeparator } from "../../utils/helper";
+
+// The month immediately before { year, month }.
+const previousMonth = ({ year, month }) =>
+  month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
 
 const Budgets = () => {
   useUserAuth();
 
+  const now = new Date();
+  const [period, setPeriod] = useState({ month: now.getMonth() + 1, year: now.getFullYear() });
+
   const [budgets, setBudgets] = useState([]);
+  const [copying, setCopying] = useState(false);
   const [openModal, setOpenModal] = useState(false);
   const [editingBudget, setEditingBudget] = useState(null);
   const [deleteAlert, setDeleteAlert] = useState({ show: false, id: null });
 
   const fetchBudgets = async () => {
     try {
-      const response = await axiosInstance.get(API_PATHS.BUDGET.GET_STATUS);
+      const response = await axiosInstance.get(
+        `${API_PATHS.BUDGET.GET_STATUS}?year=${period.year}&month=${period.month}`
+      );
       setBudgets(response.data || []);
     } catch (error) {
       console.error("Error fetching budgets:", error);
@@ -58,6 +69,8 @@ const Budgets = () => {
           category,
           monthlyLimit,
           icon,
+          year: period.year,
+          month: period.month,
         });
         toast.success("Budget created");
       }
@@ -79,43 +92,80 @@ const Budgets = () => {
     }
   };
 
+  const handleCopyFromLastMonth = async () => {
+    if (copying) return;
+    setCopying(true);
+    try {
+      const prev = previousMonth(period);
+      const response = await axiosInstance.post(API_PATHS.BUDGET.COPY_FORWARD, {
+        fromYear: prev.year,
+        fromMonth: prev.month,
+        toYear: period.year,
+        toMonth: period.month,
+      });
+      const createdCount = response.data?.created?.length || 0;
+      if (createdCount === 0) {
+        toast.error("No budgets found in the previous month to copy.");
+      } else {
+        toast.success(`Copied ${createdCount} budget${createdCount === 1 ? "" : "s"} forward`);
+      }
+      fetchBudgets();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to copy budgets");
+    } finally {
+      setCopying(false);
+    }
+  };
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount
     fetchBudgets();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period.month, period.year]);
 
   return (
     <DashboardLayout activeMenu="Budgets">
       <div className="my-5 mx-auto">
         <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-md shadow-gray-100 dark:shadow-none border border-gray-200/50 dark:border-gray-700/50 p-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h5 className="text-lg font-medium dark:text-gray-100">Monthly Budgets</h5>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                Set a spending limit per category and track it against this
+                Set a spending limit per category and track it against that
                 month's expenses.
               </p>
             </div>
 
-            <button
-              className="btn-primary w-auto px-4"
-              onClick={() => {
-                setEditingBudget(null);
-                setOpenModal(true);
-              }}
-            >
-              <span className="flex items-center gap-1">
-                <LuPlus className="text-lg" /> Add Budget
-              </span>
-            </button>
+            <div className="flex items-center gap-3 flex-wrap">
+              <MonthStepper month={period.month} year={period.year} onChange={setPeriod} />
+              <button
+                className="btn-primary w-auto px-4"
+                onClick={() => {
+                  setEditingBudget(null);
+                  setOpenModal(true);
+                }}
+              >
+                <span className="flex items-center gap-1">
+                  <LuPlus className="text-lg" /> Add Budget
+                </span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
             {budgets.length === 0 && (
-              <p className="text-sm text-gray-400 dark:text-gray-500 col-span-2">
-                No budgets set yet. Add one to start tracking your spending
-                against a limit.
-              </p>
+              <div className="col-span-2 text-sm text-gray-400 dark:text-gray-500">
+                <p>No budgets set for this month yet.</p>
+                <button
+                  type="button"
+                  className="card-btn mt-3"
+                  onClick={handleCopyFromLastMonth}
+                  disabled={copying}
+                >
+                  <LuCopy className="text-base" />
+                  {copying ? "Copying..." : "Copy last month's budgets"}
+                </button>
+              </div>
             )}
 
             {budgets.map((budget) => (

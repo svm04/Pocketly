@@ -13,6 +13,7 @@ const recurringRoutes = require("./routes/recurringRoutes");
 const savingsGoalRoutes = require("./routes/savingsGoalRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const { processDueRecurring } = require("./controllers/recurringController");
+const { backfillLegacyBudgets } = require("./controllers/budgetController");
 
 const app = express();
 
@@ -58,6 +59,12 @@ app.listen(PORT, () => {
   // was offline, then check again every day at 00:05.
   processDueRecurring().catch((err) =>
     console.error("[recurring] Startup catch-up failed:", err.message)
+  );
+
+  // One-time-per-boot migration: pin any pre-history budgets to a month
+  // and make sure the new per-month unique index is in place.
+  backfillLegacyBudgets().catch((err) =>
+    console.error("[budget] Backfill failed:", err.message)
   );
 
   cron.schedule("5 0 * * *", () => {

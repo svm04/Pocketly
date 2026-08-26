@@ -43,6 +43,7 @@ export const API_PATHS = {
   BUDGET: {
     ADD_BUDGET: "/api/v1/budget/add",
     GET_STATUS: "/api/v1/budget/status",
+    COPY_FORWARD: "/api/v1/budget/copy-forward",
     UPDATE_BUDGET: (budgetId) => `/api/v1/budget/${budgetId}`,
     DELETE_BUDGET: (budgetId) => `/api/v1/budget/${budgetId}`,
   },
