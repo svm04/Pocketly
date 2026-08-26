@@ -25,8 +25,16 @@ const CustomBarChart = ({ data }) => {
           <CartesianGrid stroke="none" />
           <XAxis dataKey="month" tick={tickStyle} stroke="none" />
           <YAxis tick={tickStyle} stroke="none" />
-          <Tooltip content={<CustomTooltip />} />
-          <Bar dataKey="amount" radius={[10, 10, 0, 0]}>
+          <Tooltip content={<CustomTooltip />} cursor={false} />
+          <Bar
+            dataKey="amount"
+            radius={[10, 10, 0, 0]}
+            activeBar={{
+              style: {
+                filter: "drop-shadow(0 0 8px rgba(135, 92, 245, 0.85))",
+              },
+            }}
+          >
             {data?.map((_, index) => (
               <Cell key={`cell-${index}`} fill={getBarColor(index)} />
             ))}
