@@ -52,9 +52,18 @@ exports.getDashboardData = async (req, res) => {
     // Breakdown by category/source, scoped to the same selected period —
     // this is the real "where did it go / where did it come from" analysis
     // for the Dashboard, replacing the old fixed last-30/60-day widgets.
+    // Grouped case-insensitively so "Groceries" and "groceries" (entered
+    // before the category picker existed) land in the same slice instead
+    // of splitting the pie; $first just picks one casing to display.
     const expenseByCategory = await Expense.aggregate([
       { $match: { userId: userObjectId, ...periodFilter } },
-      { $group: { _id: "$category", total: { $sum: "$amount" } } },
+      {
+        $group: {
+          _id: { $toLower: "$category" },
+          category: { $first: "$category" },
+          total: { $sum: "$amount" },
+        },
+      },
       { $sort: { total: -1 } },
     ]);
 
@@ -91,7 +100,7 @@ exports.getDashboardData = async (req, res) => {
       totalIncome: totalIncome[0]?.total || 0,
       totalExpense: totalExpense[0]?.total || 0,
       expenseByCategory: expenseByCategory.map((c) => ({
-        category: c._id || "Uncategorized",
+        category: c.category || "Uncategorized",
         total: c.total,
       })),
       incomeBySource: incomeBySource.map((s) => ({

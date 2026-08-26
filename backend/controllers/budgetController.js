@@ -7,6 +7,8 @@ const currentPeriod = () => {
   return { year: now.getFullYear(), month: now.getMonth() + 1 };
 };
 
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // One-time-per-boot startup migration. Budgets created before per-month
 // history existed have no year/month and were protected by an old unique
 // index on {userId, category} alone — that index would now incorrectly
@@ -47,7 +49,8 @@ exports.addBudget = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const { category, icon, monthlyLimit } = req.body;
+    const category = req.body.category?.trim();
+    const { icon, monthlyLimit } = req.body;
     const fallback = currentPeriod();
     const year = parseInt(req.body.year, 10) || fallback.year;
     const month = parseInt(req.body.month, 10) || fallback.month;
@@ -58,7 +61,14 @@ exports.addBudget = async (req, res) => {
         .json({ message: "Please provide a category and monthly limit" });
     }
 
-    const existing = await Budget.findOne({ userId, category, year, month });
+    // Case-insensitive check — the unique index is an exact-string match,
+    // which wouldn't catch "Groceries" vs "groceries" as the same category.
+    const existing = await Budget.findOne({
+      userId,
+      year,
+      month,
+      category: { $regex: `^${escapeRegex(category)}$`, $options: "i" },
+    });
     if (existing) {
       return res
         .status(400)
@@ -91,8 +101,8 @@ exports.updateBudget = async (req, res) => {
       return res.status(404).json({ message: "Budget not found" });
     }
 
-    const { category, icon, monthlyLimit } = req.body;
-    if (category !== undefined) budget.category = category;
+    const { icon, monthlyLimit } = req.body;
+    if (req.body.category !== undefined) budget.category = req.body.category.trim();
     if (icon !== undefined) budget.icon = icon;
     if (monthlyLimit !== undefined) budget.monthlyLimit = monthlyLimit;
 
@@ -130,6 +140,10 @@ exports.getBudgetStatus = async (req, res) => {
 
     const budgets = await Budget.find({ userId, year, month }).sort({ category: 1 });
 
+    // Grouped case-insensitively so a budget category matches its expenses
+    // regardless of how each was typed before the category picker existed
+    // (e.g. a "Groceries" budget previously never matched "groceries"
+    // expenses and silently showed $0 spent).
     const spendByCategory = await Expense.aggregate([
       {
         $match: {
@@ -137,7 +151,7 @@ exports.getBudgetStatus = async (req, res) => {
           date: { $gte: start, $lt: end },
         },
       },
-      { $group: { _id: "$category", total: { $sum: "$amount" } } },
+      { $group: { _id: { $toLower: "$category" }, total: { $sum: "$amount" } } },
     ]);
 
     const spendMap = spendByCategory.reduce((acc, item) => {
@@ -146,7 +160,7 @@ exports.getBudgetStatus = async (req, res) => {
     }, {});
 
     const result = budgets.map((budget) => {
-      const spent = spendMap[budget.category] || 0;
+      const spent = spendMap[budget.category.toLowerCase()] || 0;
       const percentUsed = budget.monthlyLimit
         ? Math.round((spent / budget.monthlyLimit) * 100)
         : 0;
@@ -200,10 +214,10 @@ exports.copyBudgetsForward = async (req, res) => {
       { userId, year: toYear, month: toMonth },
       "category"
     );
-    const existingCategories = new Set(existingTarget.map((b) => b.category));
+    const existingCategories = new Set(existingTarget.map((b) => b.category.toLowerCase()));
 
     const toCreate = sourceBudgets
-      .filter((b) => !existingCategories.has(b.category))
+      .filter((b) => !existingCategories.has(b.category.toLowerCase()))
       .map((b) => ({
         userId,
         category: b.category,
@@ -215,7 +229,7 @@ exports.copyBudgetsForward = async (req, res) => {
 
     const created = toCreate.length > 0 ? await Budget.insertMany(toCreate) : [];
     const skipped = sourceBudgets
-      .filter((b) => existingCategories.has(b.category))
+      .filter((b) => existingCategories.has(b.category.toLowerCase()))
       .map((b) => b.category);
 
     res.status(201).json({ created, skipped });

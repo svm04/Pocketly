@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Input from "../Inputs/Input";
+import CategoryPicker from "../Inputs/CategoryPicker";
 import EmojiPickerPopup from "../EmojiPickerPopup";
 
 const AddExpenseForm = ({ onAddExpense, initialData }) => {
@@ -26,12 +27,16 @@ const AddExpenseForm = ({ onAddExpense, initialData }) => {
         onSelect={(selectedIcon) => handleChange("icon", selectedIcon)}
       />
 
-      <Input
+      <CategoryPicker
         value={expense.category}
-        onChange={({ target }) => handleChange("category", target.value)}
+        onChange={(value) => handleChange("category", value)}
+        onSelectIcon={(icon) => {
+          // Only auto-fill the icon if one hasn't been picked already, so
+          // this never clobbers a deliberate manual choice.
+          if (!expense.icon) handleChange("icon", icon);
+        }}
         label="Category"
         placeholder="Rent, Groceries, etc"
-        type="text"
       />
 
       <Input

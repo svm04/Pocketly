@@ -38,6 +38,7 @@ export const API_PATHS = {
     UPDATE_EXPENSE: (expenseId) => `/api/v1/expense/${expenseId}`,
     GET_ALL_EXPENSE: "/api/v1/expense/get",
     MONTHLY_SUMMARY: "/api/v1/expense/monthly-summary",
+    GET_CATEGORIES: "/api/v1/expense/categories",
     DELETE_EXPENSE: (expenseId) => `/api/v1/expense/${expenseId}`,
     DOWNLOAD_EXPENSE: "/api/v1/expense/downloadexcel",
   },

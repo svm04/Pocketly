@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Input from "../Inputs/Input";
+import CategoryPicker from "../Inputs/CategoryPicker";
 import EmojiPickerPopup from "../EmojiPickerPopup";
 
 const AddBudgetForm = ({ onAddBudget, initialData }) => {
@@ -20,12 +21,14 @@ const AddBudgetForm = ({ onAddBudget, initialData }) => {
         onSelect={(selectedIcon) => handleChange("icon", selectedIcon)}
       />
 
-      <Input
+      <CategoryPicker
         value={budget.category}
-        onChange={({ target }) => handleChange("category", target.value)}
+        onChange={(value) => handleChange("category", value)}
+        onSelectIcon={(icon) => {
+          if (!budget.icon) handleChange("icon", icon);
+        }}
         label="Category"
         placeholder="Groceries, Rent, Entertainment..."
-        type="text"
       />
 
       <Input

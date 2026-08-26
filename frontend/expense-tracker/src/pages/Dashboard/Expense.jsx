@@ -32,14 +32,28 @@ const Expense = () => {
     show: false,
     id: null,
   });
+  const [categories, setCategories] = useState([]);
+  const [categoryFilter, setCategoryFilter] = useState("");
 
-  // Shared year (+ month, when in Monthly mode) query params for whichever
-  // period is currently selected.
+  // Shared year (+ month, when in Monthly mode) + category filter query
+  // params for whichever period/category is currently selected. Doesn't
+  // apply to the Annual chart's monthly-summary fetch below, which
+  // aggregates across every category by design.
   const periodParams = () => {
     const params = new URLSearchParams();
     params.set("year", period.year);
     if (period.mode === "month") params.set("month", period.month);
+    if (categoryFilter) params.set("category", categoryFilter);
     return params;
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await axiosInstance.get(API_PATHS.EXPENSE.GET_CATEGORIES);
+      setCategories(response.data || []);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+    }
   };
 
   const fetchExpenseDetails = async (page = 1) => {
@@ -132,6 +146,7 @@ const Expense = () => {
       closeModal();
       fetchExpenseDetails(pagination.currentPage);
       fetchChartData();
+      fetchCategories();
     } catch (error) {
       console.error(
         "Error saving expense:",
@@ -180,15 +195,34 @@ const Expense = () => {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refetch on period/category change
     fetchExpenseDetails(1);
     fetchChartData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period.mode, period.month, period.year]);
+  }, [period.mode, period.month, period.year, categoryFilter]);
 
   return (
     <DashboardLayout activeMenu="Expense">
       <div className="my-5 mx-auto space-y-6">
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-3 flex-wrap">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="text-sm bg-gray-50 dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-200/70 dark:border-gray-700/70 rounded-lg px-3 py-2 outline-none cursor-pointer"
+          >
+            <option value="">Show all categories</option>
+            {categories.map((c) => (
+              <option key={c.category} value={c.category}>
+                {c.icon ? `${c.icon} ` : ""}
+                {c.category}
+              </option>
+            ))}
+          </select>
+
           <PeriodSelector
             mode={period.mode}
             month={period.month}

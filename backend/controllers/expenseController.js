@@ -1,6 +1,7 @@
 const xlsx = require("xlsx");
 const { Types } = require("mongoose");
 const Expense = require("../models/Expense");
+const Budget = require("../models/Budget");
 
 // Builds a Mongo date filter from optional ?year=&month= query params.
 // No year -> {} (all-time, unchanged legacy behaviour). Year only -> that
@@ -16,12 +17,23 @@ const buildDateFilter = (req) => {
   return { date: { $gte: new Date(year, 0, 1), $lt: new Date(year + 1, 0, 1) } };
 };
 
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Case-insensitive, whole-string match on category — used by the "show by
+// category" filter so picking "Groceries" also catches any stray
+// "groceries" entries typed before the category picker existed.
+const buildCategoryFilter = (req) => {
+  if (!req.query.category) return {};
+  return { category: { $regex: `^${escapeRegex(req.query.category.trim())}$`, $options: "i" } };
+};
+
 //add expense source
 exports.addExpense = async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const { icon, category, amount, date } = req.body;
+    const { icon, amount, date } = req.body;
+    const category = req.body.category?.trim();
 
     //validation: missing fields
     if (!category || !amount || !date) {
@@ -55,7 +67,8 @@ exports.updateExpense = async (req, res) => {
       return res.status(404).json({ message: "Expense not found" });
     }
 
-    const { icon, category, amount, date } = req.body;
+    const { icon, amount, date } = req.body;
+    const category = req.body.category?.trim();
 
     if (!category || !amount || !date) {
       return res
@@ -76,14 +89,15 @@ exports.updateExpense = async (req, res) => {
   }
 };
 
-//get all expense sources (paginated, optionally scoped to a month/year)
+//get all expense sources (paginated, optionally scoped to a month/year
+//and/or a single category via the "show by category" filter)
 exports.getAllExpense = async (req, res) => {
   const userId = req.user.id;
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
     const skip = (page - 1) * limit;
-    const query = { userId, ...buildDateFilter(req) };
+    const query = { userId, ...buildDateFilter(req), ...buildCategoryFilter(req) };
 
     const [expenses, totalCount] = await Promise.all([
       Expense.find(query).sort({ date: -1 }).skip(skip).limit(limit),
@@ -134,6 +148,49 @@ exports.getExpenseMonthlySummary = async (req, res) => {
     res.json({ year, summary });
   } catch (error) {
     console.error("Get Expense Monthly Summary Error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+// Every category the user has ever used — from an actual expense, or just
+// a budget set up for it (in case an expense hasn't landed there yet) —
+// each with its most recently-seen icon, deduped case-insensitively.
+// Powers the category picker in Add/Edit Expense so new entries reuse an
+// existing category's exact spelling/casing instead of drifting into
+// near-duplicates like "Groceries" vs "groceries" that would otherwise
+// split apart in the breakdown charts.
+exports.getExpenseCategories = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const userObjectId = new Types.ObjectId(String(userId));
+    const [expenseCats, budgetCats] = await Promise.all([
+      Expense.aggregate([
+        { $match: { userId: userObjectId } },
+        { $group: { _id: "$category", icon: { $last: "$icon" } } },
+      ]),
+      Budget.aggregate([
+        { $match: { userId: userObjectId } },
+        { $group: { _id: "$category", icon: { $last: "$icon" } } },
+      ]),
+    ]);
+
+    const merged = new Map(); // lowercase category -> { category, icon }
+    [...expenseCats, ...budgetCats].forEach((c) => {
+      if (!c._id) return;
+      const key = c._id.toLowerCase();
+      if (!merged.has(key)) {
+        merged.set(key, { category: c._id, icon: c.icon || "" });
+      } else if (!merged.get(key).icon && c.icon) {
+        merged.get(key).icon = c.icon;
+      }
+    });
+
+    const categories = [...merged.values()].sort((a, b) =>
+      a.category.localeCompare(b.category)
+    );
+    res.json(categories);
+  } catch (error) {
+    console.error("Get Expense Categories Error:", error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };

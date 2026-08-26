@@ -459,12 +459,15 @@ const buildMonthReportSheet = (workbook, year, month, expenses, incomes, budgets
   if (budgets.length > 0) {
     writeSectionHeader("Budget vs Actual");
     writeTableHeader(["Category", "Budget", "Spent", "Status"]);
+    // Case-insensitive so a budget matches its expenses regardless of how
+    // each was typed (e.g. "Groceries" budget vs "groceries" expenses).
     const spendMap = expenses.reduce((acc, e) => {
-      acc[e.category] = (acc[e.category] || 0) + e.amount;
+      const key = (e.category || "").toLowerCase();
+      acc[key] = (acc[key] || 0) + e.amount;
       return acc;
     }, {});
     budgets.forEach((b) => {
-      const spent = spendMap[b.category] || 0;
+      const spent = spendMap[(b.category || "").toLowerCase()] || 0;
       const percentUsed = b.monthlyLimit ? spent / b.monthlyLimit : 0;
       const status = percentUsed >= 1 ? "Over" : percentUsed >= 0.8 ? "Warning" : "OK";
 

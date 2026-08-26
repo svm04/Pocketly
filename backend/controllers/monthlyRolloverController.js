@@ -45,7 +45,13 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
     ]),
     Expense.aggregate([
       { $match: { userId: userObjectId, date: { $gte: start, $lt: end } } },
-      { $group: { _id: "$category", total: { $sum: "$amount" } } },
+      {
+        $group: {
+          _id: { $toLower: "$category" },
+          category: { $first: "$category" },
+          total: { $sum: "$amount" },
+        },
+      },
       { $sort: { total: -1 } },
     ]),
     Income.aggregate([
@@ -59,13 +65,15 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
   const totalIncome = incomeAgg[0]?.total || 0;
   const totalExpense = expenseAgg[0]?.total || 0;
 
+  // Keyed by the lowercase category from the aggregation above, so lookups
+  // below need to lowercase the budget's category to match.
   const spendMap = expenseByCategory.reduce((acc, c) => {
     acc[c._id] = c.total;
     return acc;
   }, {});
 
   const budgetSnapshots = budgets.map((b) => {
-    const spent = spendMap[b.category] || 0;
+    const spent = spendMap[b.category.toLowerCase()] || 0;
     const percentUsed = b.monthlyLimit ? Math.round((spent / b.monthlyLimit) * 100) : 0;
     return {
       category: b.category,
@@ -80,7 +88,7 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
     totalExpense,
     totalBalance: totalIncome - totalExpense,
     expenseByCategory: expenseByCategory.map((c) => ({
-      category: c._id || "Uncategorized",
+      category: c.category || "Uncategorized",
       total: c.total,
     })),
     incomeBySource: incomeBySource.map((s) => ({
@@ -103,9 +111,9 @@ const closeMonthForUser = async (userId, year, month, { force = false } = {}) =>
   if (budgets.length > 0) {
     const { year: nYear, month: nMonth } = nextMonth({ year, month });
     const existingNext = await Budget.find({ userId, year: nYear, month: nMonth }, "category");
-    const existingCats = new Set(existingNext.map((b) => b.category));
+    const existingCats = new Set(existingNext.map((b) => b.category.toLowerCase()));
     const toCreate = budgets
-      .filter((b) => !existingCats.has(b.category))
+      .filter((b) => !existingCats.has(b.category.toLowerCase()))
       .map((b) => ({
         userId,
         category: b.category,
