@@ -23,6 +23,7 @@ export const API_PATHS = {
   TRANSACTIONS: {
     GET_ALL: "/api/v1/transactions/get",
     EXPORT_EXCEL: "/api/v1/transactions/export/excel",
+    EXPORT_MONTHLY_REPORT: "/api/v1/transactions/export/monthly-report",
   },
   INCOME: {
     ADD_INCOME: "/api/v1/income/add",

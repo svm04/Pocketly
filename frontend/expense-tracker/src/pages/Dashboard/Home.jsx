@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { LuHandCoins, LuWalletMinimal, LuFileSpreadsheet, LuCalendarPlus } from "react-icons/lu";
+import {
+  LuHandCoins,
+  LuWalletMinimal,
+  LuFileSpreadsheet,
+  LuCalendarPlus,
+  LuCalendarRange,
+} from "react-icons/lu";
 import { IoMdCard } from "react-icons/io";
 import toast from "react-hot-toast";
 import DashboardLayout from "../../components/layouts/DashboardLayout";
@@ -36,6 +42,7 @@ const Home = () => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingMonthly, setExportingMonthly] = useState(false);
   const [showStartMonthConfirm, setShowStartMonthConfirm] = useState(false);
   const [startingMonth, setStartingMonth] = useState(false);
   const [recapRefreshKey, setRecapRefreshKey] = useState(0);
@@ -55,6 +62,27 @@ const Home = () => {
       toast.error("Failed to export report. Please try again.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Downloads the year-long, one-sheet-per-month budgeting workbook for
+  // whichever year is currently selected (falls back to this year when
+  // viewing in Monthly mode within the current year).
+  const handleExportMonthlyReport = async () => {
+    if (exportingMonthly) return;
+    setExportingMonthly(true);
+    try {
+      const response = await axiosInstance.get(
+        `${API_PATHS.TRANSACTIONS.EXPORT_MONTHLY_REPORT}?year=${period.year}`,
+        { responseType: "blob" }
+      );
+      downloadBlob(response.data, `Pocketly-Monthly-Report-${period.year}.xlsx`);
+      toast.success("Monthly report downloaded");
+    } catch (error) {
+      console.error("Error exporting monthly report:", error);
+      toast.error("Failed to export monthly report. Please try again.");
+    } finally {
+      setExportingMonthly(false);
     }
   };
 
@@ -117,6 +145,15 @@ const Home = () => {
               onClick={() => setShowStartMonthConfirm(true)}
             >
               <LuCalendarPlus className="text-base" /> Start New Month
+            </button>
+            <button
+              type="button"
+              className="card-btn"
+              onClick={handleExportMonthlyReport}
+              disabled={exportingMonthly}
+            >
+              <LuCalendarRange className="text-base" />
+              {exportingMonthly ? "Preparing..." : `Monthly Report (${period.year})`}
             </button>
             <button
               type="button"

@@ -2,6 +2,12 @@ const { Types } = require("mongoose");
 const ExcelJS = require("exceljs");
 const Income = require("../models/Income");
 const Expense = require("../models/Expense");
+const Budget = require("../models/Budget");
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 const BRAND = "FF875CF5";
 const BRAND_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: BRAND } };
@@ -315,6 +321,225 @@ exports.getAllTransactions = async (req, res) => {
     });
   } catch (error) {
     console.error("Get All Transactions Error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
+// ---- Monthly Report export ----
+// Mirrors a typical "one sheet per month" manual budgeting spreadsheet: a
+// Summary sheet with every month's income/expense/net for the year, plus
+// one detailed sheet per month. Unlike a manual spreadsheet, each month
+// sheet also gets a Budget vs Actual table, since Pocketly actually knows
+// what was budgeted.
+
+const buildYearSummarySheet = (workbook, year, monthlyTotals) => {
+  const sheet = workbook.addWorksheet("Summary");
+  sheet.columns = [
+    { header: "Month", key: "month", width: 18 },
+    { header: "Income", key: "income", width: 16 },
+    { header: "Expense", key: "expense", width: 16 },
+    { header: "Net Savings", key: "net", width: 16 },
+  ];
+  styleHeaderRow(sheet);
+
+  monthlyTotals.forEach((m) => {
+    const net = m.totalIncome - m.totalExpense;
+    const row = sheet.addRow({
+      month: `${MONTH_NAMES[m.month - 1]} ${year}`,
+      income: m.totalIncome,
+      expense: m.totalExpense,
+      net,
+    });
+    row.getCell("net").font = { color: { argb: net >= 0 ? GREEN : RED } };
+  });
+
+  const totalIncome = monthlyTotals.reduce((s, m) => s + m.totalIncome, 0);
+  const totalExpense = monthlyTotals.reduce((s, m) => s + m.totalExpense, 0);
+  const totalRow = sheet.addRow({
+    month: "Total",
+    income: totalIncome,
+    expense: totalExpense,
+    net: totalIncome - totalExpense,
+  });
+  totalRow.font = { bold: true };
+  totalRow.eachCell((cell) => {
+    cell.border = { top: BRAND_LINE };
+  });
+
+  ["income", "expense", "net"].forEach((key) => {
+    sheet.getColumn(key).numFmt = CURRENCY_FMT;
+  });
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  return sheet;
+};
+
+// One sheet per month: an Expenses table, an Income table, and a Budget vs
+// Actual table underneath (only if any budgets existed that month), each
+// with its own total row.
+const buildMonthReportSheet = (workbook, year, month, expenses, incomes, budgets) => {
+  const sheet = workbook.addWorksheet(`${MONTH_NAMES[month - 1]} ${year}`);
+  sheet.columns = [{ width: 14 }, { width: 10 }, { width: 26 }, { width: 16 }];
+
+  let row = 1;
+  const writeSectionHeader = (title) => {
+    sheet.getCell(row, 1).value = title;
+    sheet.getCell(row, 1).font = { bold: true, size: 13, color: { argb: BRAND } };
+    row += 1;
+  };
+  const writeTableHeader = (headers) => {
+    headers.forEach((h, i) => {
+      const cell = sheet.getCell(row, i + 1);
+      cell.value = h;
+      cell.font = HEADER_FONT;
+      cell.fill = BRAND_FILL;
+    });
+    row += 1;
+  };
+  const writeEmptyNote = (text) => {
+    const cell = sheet.getCell(row, 1);
+    cell.value = text;
+    cell.font = { italic: true, color: { argb: "FF9CA3AF" } };
+    row += 1;
+  };
+
+  // ---- Expenses ----
+  writeSectionHeader("Expenses");
+  writeTableHeader(["Date", "Icon", "Category", "Amount"]);
+  expenses.forEach((e) => {
+    sheet.getCell(row, 1).value = new Date(e.date).toLocaleDateString();
+    sheet.getCell(row, 2).value = e.icon || "";
+    sheet.getCell(row, 3).value = e.category;
+    const amountCell = sheet.getCell(row, 4);
+    amountCell.value = e.amount;
+    amountCell.numFmt = CURRENCY_FMT;
+    row += 1;
+  });
+  if (expenses.length === 0) writeEmptyNote("No expenses recorded.");
+  const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
+  sheet.getCell(row, 3).value = "Total Expenses";
+  sheet.getCell(row, 3).font = { bold: true };
+  const totalExpenseCell = sheet.getCell(row, 4);
+  totalExpenseCell.value = totalExpense;
+  totalExpenseCell.numFmt = CURRENCY_FMT;
+  totalExpenseCell.font = { bold: true };
+  row += 2;
+
+  // ---- Income ----
+  writeSectionHeader("Income");
+  writeTableHeader(["Date", "Icon", "Source", "Amount"]);
+  incomes.forEach((i) => {
+    sheet.getCell(row, 1).value = new Date(i.date).toLocaleDateString();
+    sheet.getCell(row, 2).value = i.icon || "";
+    sheet.getCell(row, 3).value = i.source;
+    const amountCell = sheet.getCell(row, 4);
+    amountCell.value = i.amount;
+    amountCell.numFmt = CURRENCY_FMT;
+    row += 1;
+  });
+  if (incomes.length === 0) writeEmptyNote("No income recorded.");
+  const totalIncome = incomes.reduce((sum, i) => sum + i.amount, 0);
+  sheet.getCell(row, 3).value = "Total Income";
+  sheet.getCell(row, 3).font = { bold: true };
+  const totalIncomeCell = sheet.getCell(row, 4);
+  totalIncomeCell.value = totalIncome;
+  totalIncomeCell.numFmt = CURRENCY_FMT;
+  totalIncomeCell.font = { bold: true };
+  row += 1;
+
+  const net = totalIncome - totalExpense;
+  sheet.getCell(row, 3).value = "Net Savings";
+  sheet.getCell(row, 3).font = { bold: true };
+  const netCell = sheet.getCell(row, 4);
+  netCell.value = net;
+  netCell.numFmt = CURRENCY_FMT;
+  netCell.font = { bold: true, color: { argb: net >= 0 ? GREEN : RED } };
+  row += 2;
+
+  // ---- Budget vs Actual ----
+  if (budgets.length > 0) {
+    writeSectionHeader("Budget vs Actual");
+    writeTableHeader(["Category", "Budget", "Spent", "Status"]);
+    const spendMap = expenses.reduce((acc, e) => {
+      acc[e.category] = (acc[e.category] || 0) + e.amount;
+      return acc;
+    }, {});
+    budgets.forEach((b) => {
+      const spent = spendMap[b.category] || 0;
+      const percentUsed = b.monthlyLimit ? spent / b.monthlyLimit : 0;
+      const status = percentUsed >= 1 ? "Over" : percentUsed >= 0.8 ? "Warning" : "OK";
+
+      sheet.getCell(row, 1).value = b.category;
+      const limitCell = sheet.getCell(row, 2);
+      limitCell.value = b.monthlyLimit;
+      limitCell.numFmt = CURRENCY_FMT;
+      const spentCell = sheet.getCell(row, 3);
+      spentCell.value = spent;
+      spentCell.numFmt = CURRENCY_FMT;
+      const statusCell = sheet.getCell(row, 4);
+      statusCell.value = status;
+      statusCell.font = {
+        color: { argb: status === "Over" ? RED : status === "Warning" ? "FFCA8A04" : GREEN },
+      };
+      row += 1;
+    });
+  }
+
+  return sheet;
+};
+
+// Streams a full-year workbook: Summary + one sheet per month (Jan-Dec,
+// present even for months with no data yet, same as a template spreadsheet
+// laid out for the whole year in advance).
+exports.exportMonthlyReportExcel = async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const start = new Date(year, 0, 1);
+    const end = new Date(year + 1, 0, 1);
+
+    const [allIncomes, allExpenses, allBudgets] = await Promise.all([
+      Income.find({ userId, date: { $gte: start, $lt: end } }).sort({ date: 1 }),
+      Expense.find({ userId, date: { $gte: start, $lt: end } }).sort({ date: 1 }),
+      Budget.find({ userId, year }),
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Pocketly";
+    workbook.created = new Date();
+
+    const monthlyTotals = [];
+    const monthBreakdown = [];
+
+    for (let month = 1; month <= 12; month++) {
+      const monthIncomes = allIncomes.filter((i) => new Date(i.date).getMonth() + 1 === month);
+      const monthExpenses = allExpenses.filter((e) => new Date(e.date).getMonth() + 1 === month);
+      const monthBudgets = allBudgets.filter((b) => b.month === month);
+
+      monthlyTotals.push({
+        month,
+        totalIncome: monthIncomes.reduce((s, i) => s + i.amount, 0),
+        totalExpense: monthExpenses.reduce((s, e) => s + e.amount, 0),
+      });
+      monthBreakdown.push({ month, monthIncomes, monthExpenses, monthBudgets });
+    }
+
+    buildYearSummarySheet(workbook, year, monthlyTotals);
+    monthBreakdown.forEach(({ month, monthIncomes, monthExpenses, monthBudgets }) => {
+      buildMonthReportSheet(workbook, year, month, monthExpenses, monthIncomes, monthBudgets);
+    });
+
+    const filename = `Pocketly-Monthly-Report-${year}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Export Monthly Report Excel Error:", error);
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
