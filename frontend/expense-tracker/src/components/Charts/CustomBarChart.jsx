@@ -23,7 +23,12 @@ const CustomBarChart = ({ data }) => {
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
           <CartesianGrid stroke="none" />
-          <XAxis dataKey="month" tick={tickStyle} stroke="none" />
+          <XAxis
+            dataKey="month"
+            tick={tickStyle}
+            stroke="none"
+            tickFormatter={(value) => value?.split("__")[0] ?? value}
+          />
           <YAxis tick={tickStyle} stroke="none" />
           <Tooltip content={<CustomTooltip />} cursor={false} />
           <Bar

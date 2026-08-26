@@ -32,11 +32,21 @@ export const prepareIncomeLineChartData = (transactions = []) => {
     (a, b) => new Date(a.date) - new Date(b.date)
   );
 
-  return sorted.map((txn) => ({
-    month: moment(txn.date).format("Do MMM"),
-    amount: txn.amount,
-    source: txn.source,
-  }));
+  return sorted.map((txn, index) => {
+    const label = moment(txn.date).format("Do MMM");
+    return {
+      // Recharts looks up tooltip/hover data by matching this axis value.
+      // When two transactions fall on the same day, "label" alone collides
+      // and Recharts always resolves to the *first* matching entry —
+      // making a second same-day bar silently show the wrong bar's data.
+      // Appending the index keeps every entry's key unique; `label` (the
+      // pretty "18th Aug" text) is still what's shown on the axis/tooltip.
+      month: `${label}__${index}`,
+      label,
+      amount: txn.amount,
+      source: txn.source,
+    };
+  });
 };
 
 // Groups expense transactions by day for a bar chart
@@ -45,9 +55,15 @@ export const prepareExpenseBarChartData = (transactions = []) => {
     (a, b) => new Date(a.date) - new Date(b.date)
   );
 
-  return sorted.map((txn) => ({
-    month: moment(txn.date).format("Do MMM"),
-    amount: txn.amount,
-    category: txn.category,
-  }));
+  return sorted.map((txn, index) => {
+    const label = moment(txn.date).format("Do MMM");
+    return {
+      // See prepareIncomeLineChartData above for why this needs to be
+      // unique per entry rather than just the formatted day label.
+      month: `${label}__${index}`,
+      label,
+      amount: txn.amount,
+      category: txn.category,
+    };
+  });
 };
