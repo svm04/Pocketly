@@ -33,6 +33,28 @@ body {
 
 }
 
+/* Chrome/Safari force a white background + black text onto autofilled
+   inputs, ignoring the site's own styling. This repaints it (via a huge
+   inset box-shadow, the standard workaround) to match input-box's own
+   background/text color instead of leaving a jarring white box. */
+.input-box input:-webkit-autofill,
+.input-box input:-webkit-autofill:hover,
+.input-box input:-webkit-autofill:focus,
+.input-box input:-webkit-autofill:active {
+  -webkit-text-fill-color: #000;
+  box-shadow: 0 0 0px 1000px #f1f5f9 inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.dark .input-box input:-webkit-autofill,
+.dark .input-box input:-webkit-autofill:hover,
+.dark .input-box input:-webkit-autofill:focus,
+.dark .input-box input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f3f4f6;
+  box-shadow: 0 0 0px 1000px #1f2937 inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 .btn-primary{
   @apply w-full text-sm font-medium text-white bg-violet-500 shadow-lg shadow-purple-600/5 p-[10px] rounded-md my-1 hover:bg-purple-600/15 hover:text-purple-600;
 }
