@@ -25,7 +25,10 @@ app.use(
   })
 );
 
-app.use(express.json());
+// Default body-size limit is 100kb — too small for a profile picture sent
+// as a base64 data URI (a 2MB image encodes to ~2.7MB of JSON text), so
+// raise it enough to comfortably fit one plus everything else.
+app.use(express.json({ limit: "5mb" }));
 connectDB();
 
 // A friendly root route — mainly so a browser visit or an uptime/keep-alive
