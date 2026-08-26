@@ -2,14 +2,41 @@ const Income = require("../models/Income");
 const Expense = require("../models/Expense");
 const { isValidObjectId, Types } = require("mongoose");
 
+// Builds a Mongo date filter for the dashboard's totals from
+// ?period=month|year (+ month/year). No/unrecognized period -> {}, i.e.
+// the original all-time behaviour, so existing callers are unaffected.
+const buildPeriodFilter = (req) => {
+  const { period } = req.query;
+  if (period !== "month" && period !== "year") {
+    return { filter: {}, label: "all-time" };
+  }
+
+  const now = new Date();
+  const year = parseInt(req.query.year, 10) || now.getFullYear();
+
+  if (period === "month") {
+    const month = parseInt(req.query.month, 10) || now.getMonth() + 1;
+    return {
+      filter: { date: { $gte: new Date(year, month - 1, 1), $lt: new Date(year, month, 1) } },
+      label: "month",
+    };
+  }
+
+  return {
+    filter: { date: { $gte: new Date(year, 0, 1), $lt: new Date(year + 1, 0, 1) } },
+    label: "year",
+  };
+};
+
 //get dashboard data
 exports.getDashboardData = async (req, res) => {
   try {
     const userId = req.user.id;
     const userObjectId = new Types.ObjectId(String(userId));
+    const { filter: periodFilter, label: period } = buildPeriodFilter(req);
 
     const totalIncome = await Income.aggregate([
-      { $match: { userId: userObjectId } },
+      { $match: { userId: userObjectId, ...periodFilter } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]);
 
@@ -18,7 +45,7 @@ exports.getDashboardData = async (req, res) => {
       userId: isValidObjectId(userId),
     });
     const totalExpense = await Expense.aggregate([
-      { $match: { userId: userObjectId } },
+      { $match: { userId: userObjectId, ...periodFilter } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]);
 
@@ -67,6 +94,7 @@ exports.getDashboardData = async (req, res) => {
 
     //Final response
     res.json({
+      period,
       totalBalance:
         (totalIncome[0]?.total || 0) - (totalExpense[0]?.total || 0),
       totalIncome: totalIncome[0]?.total || 0,

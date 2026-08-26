@@ -9,12 +9,21 @@ import Modal from "../../components/Modal";
 import AddIncomeForm from "../../components/Income/AddIncomeForm";
 import IncomeList from "../../components/Income/IncomeList";
 import DeleteAlert from "../../components/DeleteAlert";
+import PeriodSelector from "../../components/PeriodSelector";
 
 const Income = () => {
   useUserAuth();
 
+  const now = new Date();
+  const [period, setPeriod] = useState({
+    mode: "month",
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  });
+
   const [incomeData, setIncomeData] = useState([]);
   const [chartTransactions, setChartTransactions] = useState([]);
+  const [monthlySummary, setMonthlySummary] = useState([]);
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1 });
   const [loading, setLoading] = useState(false);
   const [openAddIncomeModal, setOpenAddIncomeModal] = useState(false);
@@ -24,12 +33,24 @@ const Income = () => {
     id: null,
   });
 
+  // Shared year (+ month, when in Monthly mode) query params for whichever
+  // period is currently selected.
+  const periodParams = () => {
+    const params = new URLSearchParams();
+    params.set("year", period.year);
+    if (period.mode === "month") params.set("month", period.month);
+    return params;
+  };
+
   const fetchIncomeDetails = async (page = 1) => {
     if (loading) return;
     setLoading(true);
     try {
+      const params = periodParams();
+      params.set("page", page);
+      params.set("limit", 10);
       const response = await axiosInstance.get(
-        `${API_PATHS.INCOME.GET_ALL_INCOME}?page=${page}&limit=10`
+        `${API_PATHS.INCOME.GET_ALL_INCOME}?${params.toString()}`
       );
       if (response.data) {
         setIncomeData(response.data.transactions || []);
@@ -45,14 +66,24 @@ const Income = () => {
     }
   };
 
-  // A separate, larger fetch just for the trend chart, so it isn't limited
-  // to whatever page the list happens to be showing.
+  // Monthly view: fetch this month's transactions for the per-day trend
+  // chart. Annual view: fetch the year's 12-month totals instead.
   const fetchChartData = async () => {
     try {
-      const response = await axiosInstance.get(
-        `${API_PATHS.INCOME.GET_ALL_INCOME}?page=1&limit=100`
-      );
-      setChartTransactions(response.data?.transactions || []);
+      if (period.mode === "year") {
+        const response = await axiosInstance.get(
+          `${API_PATHS.INCOME.MONTHLY_SUMMARY}?year=${period.year}`
+        );
+        setMonthlySummary(response.data?.summary || []);
+      } else {
+        const params = periodParams();
+        params.set("page", 1);
+        params.set("limit", 100);
+        const response = await axiosInstance.get(
+          `${API_PATHS.INCOME.GET_ALL_INCOME}?${params.toString()}`
+        );
+        setChartTransactions(response.data?.transactions || []);
+      }
     } catch (error) {
       console.error("Something went wrong while fetching income chart data:", error);
     }
@@ -152,14 +183,25 @@ const Income = () => {
     fetchIncomeDetails(1);
     fetchChartData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [period.mode, period.month, period.year]);
 
   return (
     <DashboardLayout activeMenu="Income">
       <div className="my-5 mx-auto space-y-6">
+        <div className="flex items-center justify-end">
+          <PeriodSelector
+            mode={period.mode}
+            month={period.month}
+            year={period.year}
+            onChange={setPeriod}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-6">
           <IncomeOverview
             transactions={chartTransactions}
+            monthlySummary={monthlySummary}
+            period={period.mode}
             onAddIncome={() => {
               setEditingIncome(null);
               setOpenAddIncomeModal(true);

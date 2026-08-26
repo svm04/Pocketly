@@ -1,15 +1,24 @@
 import React, { useMemo, useState } from "react";
 import { LuPlus, LuRepeat } from "react-icons/lu";
 import CustomLineChart from "../Charts/CustomLineChart";
-import { prepareIncomeLineChartData } from "../../utils/helper";
+import {
+  prepareIncomeLineChartData,
+  prepareIncomeMonthlyChartData,
+} from "../../utils/helper";
 import RecurringManager from "../Recurring/RecurringManager";
 
-const IncomeOverview = ({ transactions, onAddIncome }) => {
+// `period` is "month" (default) or "year". In month view the chart is
+// per-transaction, same as always; in year view it switches to the
+// 12-points-per-year aggregate fed by `monthlySummary`.
+const IncomeOverview = ({ transactions, monthlySummary, period = "month", onAddIncome }) => {
   const [showRecurring, setShowRecurring] = useState(false);
 
   const chartData = useMemo(
-    () => prepareIncomeLineChartData(transactions),
-    [transactions]
+    () =>
+      period === "year"
+        ? prepareIncomeMonthlyChartData(monthlySummary)
+        : prepareIncomeLineChartData(transactions),
+    [period, transactions, monthlySummary]
   );
 
   return (

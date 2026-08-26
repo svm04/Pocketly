@@ -15,9 +15,17 @@ import Last30DaysExpenses from "../../components/Dashboard/Last30DaysExpenses";
 import RecentIncomeWithChart from "../../components/Dashboard/RecentIncomeWithChart";
 import BudgetAlerts from "../../components/Dashboard/BudgetAlerts";
 import GoalsSummary from "../../components/Dashboard/GoalsSummary";
+import PeriodSelector from "../../components/PeriodSelector";
 
 const Home = () => {
   useUserAuth();
+
+  const now = new Date();
+  const [period, setPeriod] = useState({
+    mode: "month",
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  });
 
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -45,7 +53,11 @@ const Home = () => {
     if (loading) return;
     setLoading(true);
     try {
-      const response = await axiosInstance.get(API_PATHS.DASHBOARD.GET_DATA);
+      const params = new URLSearchParams({ period: period.mode, year: period.year });
+      if (period.mode === "month") params.set("month", period.month);
+      const response = await axiosInstance.get(
+        `${API_PATHS.DASHBOARD.GET_DATA}?${params.toString()}`
+      );
       if (response.data) {
         setDashboardData(response.data);
       }
@@ -60,42 +72,50 @@ const Home = () => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount
     fetchDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [period.mode, period.month, period.year]);
 
   return (
     <DashboardLayout activeMenu="Dashboard">
       <div className="my-5 mx-auto">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h4 className="text-lg font-medium dark:text-gray-100">Overview</h4>
-          <button
-            type="button"
-            className="add-btn"
-            onClick={handleExportReport}
-            disabled={exporting}
-          >
-            <LuFileSpreadsheet className="text-base" />
-            {exporting ? "Preparing..." : "Export Report"}
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <PeriodSelector
+              mode={period.mode}
+              month={period.month}
+              year={period.year}
+              onChange={setPeriod}
+            />
+            <button
+              type="button"
+              className="add-btn"
+              onClick={handleExportReport}
+              disabled={exporting}
+            >
+              <LuFileSpreadsheet className="text-base" />
+              {exporting ? "Preparing..." : "Export Report"}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <InfoCard
             icon={<IoMdCard />}
-            label="Total Balance"
+            label={period.mode === "year" ? "Balance This Year" : "Balance This Month"}
             value={dashboardData?.totalBalance || 0}
             color="bg-primary"
           />
 
           <InfoCard
             icon={<LuWalletMinimal />}
-            label="Total Income"
+            label={period.mode === "year" ? "Income This Year" : "Income This Month"}
             value={dashboardData?.totalIncome || 0}
             color="bg-orange-500"
           />
 
           <InfoCard
             icon={<LuHandCoins />}
-            label="Total Expense"
+            label={period.mode === "year" ? "Expense This Year" : "Expense This Month"}
             value={dashboardData?.totalExpense || 0}
             color="bg-red-500"
           />

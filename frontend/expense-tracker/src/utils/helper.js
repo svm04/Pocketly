@@ -67,3 +67,29 @@ export const prepareExpenseBarChartData = (transactions = []) => {
     };
   });
 };
+
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// Turns a year's { month, total } summary (from the monthly-summary
+// endpoints) into one bar/point per month for the Annual view — Jan
+// through Dec, zero-filled by the backend so the axis is always complete.
+export const prepareExpenseMonthlyChartData = (summary = []) => {
+  return summary.map((item) => ({
+    month: `${MONTH_LABELS[item.month - 1]}__${item.month}`,
+    label: MONTH_LABELS[item.month - 1],
+    amount: item.total,
+    category: "",
+  }));
+};
+
+export const prepareIncomeMonthlyChartData = (summary = []) => {
+  return summary.map((item) => ({
+    month: `${MONTH_LABELS[item.month - 1]}__${item.month}`,
+    label: MONTH_LABELS[item.month - 1],
+    amount: item.total,
+    source: "",
+  }));
+};

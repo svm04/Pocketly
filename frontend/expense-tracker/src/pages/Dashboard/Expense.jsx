@@ -9,12 +9,21 @@ import Modal from "../../components/Modal";
 import AddExpenseForm from "../../components/Expense/AddExpenseForm";
 import ExpenseList from "../../components/Expense/ExpenseList";
 import DeleteAlert from "../../components/DeleteAlert";
+import PeriodSelector from "../../components/PeriodSelector";
 
 const Expense = () => {
   useUserAuth();
 
+  const now = new Date();
+  const [period, setPeriod] = useState({
+    mode: "month",
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  });
+
   const [expenseData, setExpenseData] = useState([]);
   const [chartTransactions, setChartTransactions] = useState([]);
+  const [monthlySummary, setMonthlySummary] = useState([]);
   const [pagination, setPagination] = useState({ currentPage: 1, totalPages: 1 });
   const [loading, setLoading] = useState(false);
   const [openAddExpenseModal, setOpenAddExpenseModal] = useState(false);
@@ -24,12 +33,24 @@ const Expense = () => {
     id: null,
   });
 
+  // Shared year (+ month, when in Monthly mode) query params for whichever
+  // period is currently selected.
+  const periodParams = () => {
+    const params = new URLSearchParams();
+    params.set("year", period.year);
+    if (period.mode === "month") params.set("month", period.month);
+    return params;
+  };
+
   const fetchExpenseDetails = async (page = 1) => {
     if (loading) return;
     setLoading(true);
     try {
+      const params = periodParams();
+      params.set("page", page);
+      params.set("limit", 10);
       const response = await axiosInstance.get(
-        `${API_PATHS.EXPENSE.GET_ALL_EXPENSE}?page=${page}&limit=10`
+        `${API_PATHS.EXPENSE.GET_ALL_EXPENSE}?${params.toString()}`
       );
       if (response.data) {
         setExpenseData(response.data.transactions || []);
@@ -45,12 +66,24 @@ const Expense = () => {
     }
   };
 
+  // Monthly view: fetch this month's transactions for the per-day bar
+  // chart. Annual view: fetch the year's 12-month totals instead.
   const fetchChartData = async () => {
     try {
-      const response = await axiosInstance.get(
-        `${API_PATHS.EXPENSE.GET_ALL_EXPENSE}?page=1&limit=100`
-      );
-      setChartTransactions(response.data?.transactions || []);
+      if (period.mode === "year") {
+        const response = await axiosInstance.get(
+          `${API_PATHS.EXPENSE.MONTHLY_SUMMARY}?year=${period.year}`
+        );
+        setMonthlySummary(response.data?.summary || []);
+      } else {
+        const params = periodParams();
+        params.set("page", 1);
+        params.set("limit", 100);
+        const response = await axiosInstance.get(
+          `${API_PATHS.EXPENSE.GET_ALL_EXPENSE}?${params.toString()}`
+        );
+        setChartTransactions(response.data?.transactions || []);
+      }
     } catch (error) {
       console.error("Something went wrong while fetching expense chart data:", error);
     }
@@ -150,14 +183,25 @@ const Expense = () => {
     fetchExpenseDetails(1);
     fetchChartData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [period.mode, period.month, period.year]);
 
   return (
     <DashboardLayout activeMenu="Expense">
       <div className="my-5 mx-auto space-y-6">
+        <div className="flex items-center justify-end">
+          <PeriodSelector
+            mode={period.mode}
+            month={period.month}
+            year={period.year}
+            onChange={setPeriod}
+          />
+        </div>
+
         <div className="grid grid-cols-1 gap-6">
           <ExpenseOverview
             transactions={chartTransactions}
+            monthlySummary={monthlySummary}
+            period={period.mode}
             onAddExpense={() => {
               setEditingExpense(null);
               setOpenAddExpenseModal(true);

@@ -1,15 +1,24 @@
 import React, { useMemo, useState } from "react";
 import { LuPlus, LuRepeat } from "react-icons/lu";
 import CustomBarChart from "../Charts/CustomBarChart";
-import { prepareExpenseBarChartData } from "../../utils/helper";
+import {
+  prepareExpenseBarChartData,
+  prepareExpenseMonthlyChartData,
+} from "../../utils/helper";
 import RecurringManager from "../Recurring/RecurringManager";
 
-const ExpenseOverview = ({ transactions, onAddExpense }) => {
+// `period` is "month" (default) or "year". In month view the chart is
+// per-transaction, same as always; in year view it switches to the
+// 12-bars-per-year aggregate fed by `monthlySummary`.
+const ExpenseOverview = ({ transactions, monthlySummary, period = "month", onAddExpense }) => {
   const [showRecurring, setShowRecurring] = useState(false);
 
   const chartData = useMemo(
-    () => prepareExpenseBarChartData(transactions),
-    [transactions]
+    () =>
+      period === "year"
+        ? prepareExpenseMonthlyChartData(monthlySummary)
+        : prepareExpenseBarChartData(transactions),
+    [period, transactions, monthlySummary]
   );
 
   return (

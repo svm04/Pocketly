@@ -1,5 +1,20 @@
 const xlsx = require("xlsx");
+const { Types } = require("mongoose");
 const Expense = require("../models/Expense");
+
+// Builds a Mongo date filter from optional ?year=&month= query params.
+// No year -> {} (all-time, unchanged legacy behaviour). Year only -> that
+// whole calendar year. Year + month -> just that month.
+const buildDateFilter = (req) => {
+  const year = parseInt(req.query.year, 10);
+  if (!year) return {};
+
+  const month = parseInt(req.query.month, 10);
+  if (month >= 1 && month <= 12) {
+    return { date: { $gte: new Date(year, month - 1, 1), $lt: new Date(year, month, 1) } };
+  }
+  return { date: { $gte: new Date(year, 0, 1), $lt: new Date(year + 1, 0, 1) } };
+};
 
 //add expense source
 exports.addExpense = async (req, res) => {
@@ -61,17 +76,18 @@ exports.updateExpense = async (req, res) => {
   }
 };
 
-//get all expense sources (paginated)
+//get all expense sources (paginated, optionally scoped to a month/year)
 exports.getAllExpense = async (req, res) => {
   const userId = req.user.id;
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 100);
     const skip = (page - 1) * limit;
+    const query = { userId, ...buildDateFilter(req) };
 
     const [expenses, totalCount] = await Promise.all([
-      Expense.find({ userId }).sort({ date: -1 }).skip(skip).limit(limit),
-      Expense.countDocuments({ userId }),
+      Expense.find(query).sort({ date: -1 }).skip(skip).limit(limit),
+      Expense.countDocuments(query),
     ]);
 
     res.json({
@@ -83,6 +99,42 @@ exports.getAllExpense = async (req, res) => {
   } catch (error) {
     console.error("Get All expense Error:", error); // ADD THIS LINE
     res.status(500).json({ message: "Server Error" });
+  }
+};
+
+// Per-month totals for a given year (Jan-Dec, zero-filled) — powers the
+// Annual view's bar chart without shipping every individual transaction.
+exports.getExpenseMonthlySummary = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const start = new Date(year, 0, 1);
+    const end = new Date(year + 1, 0, 1);
+
+    const results = await Expense.aggregate([
+      {
+        $match: {
+          userId: new Types.ObjectId(String(userId)),
+          date: { $gte: start, $lt: end },
+        },
+      },
+      { $group: { _id: { $month: "$date" }, total: { $sum: "$amount" } } },
+    ]);
+
+    const totalsByMonth = results.reduce((acc, r) => {
+      acc[r._id] = r.total;
+      return acc;
+    }, {});
+
+    const summary = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      total: totalsByMonth[i + 1] || 0,
+    }));
+
+    res.json({ year, summary });
+  } catch (error) {
+    console.error("Get Expense Monthly Summary Error:", error);
+    res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
 
