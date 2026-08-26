@@ -36,39 +36,56 @@ const styleHeaderRow = (sheet, rowNumber = 1) => {
 // with its date, weekday, icon and amount, a bold total row, and — the
 // "detailed" part — a breakdown table underneath showing how much came
 // from/went to each source/category, with counts and % of the total.
-const buildTransactionSheet = (workbook, name, rows, labelKey, labelHeader) => {
+// `noteKey` is optional — when passed (Expenses only, keyed to
+// "description"), an extra column is inserted between the category and
+// the amount for the per-expense note (e.g. "Dinner - Uber Eats"). Total
+// row / column formatting below reference columns by their live letter
+// (via sheet.getColumn(...).letter) rather than a hardcoded "D"/"E" so
+// this doesn't break whichever sheet does or doesn't have that column.
+const buildTransactionSheet = (workbook, name, rows, labelKey, labelHeader, noteKey) => {
   const sheet = workbook.addWorksheet(name);
-  sheet.columns = [
+  const columns = [
     { header: "Date", key: "date", width: 14 },
     { header: "Day", key: "day", width: 12 },
     { header: "Icon", key: "icon", width: 8 },
     { header: labelHeader, key: "label", width: 26 },
-    { header: "Amount", key: "amount", width: 16 },
   ];
+  if (noteKey) {
+    columns.push({ header: "Description", key: "note", width: 28 });
+  }
+  columns.push({ header: "Amount", key: "amount", width: 16 });
+  sheet.columns = columns;
   styleHeaderRow(sheet);
 
   rows.forEach((r) => {
     const d = new Date(r.date);
-    const row = sheet.addRow({
+    const rowData = {
       date: d.toLocaleDateString(),
       day: WEEKDAYS[d.getDay()],
       icon: r.icon || "",
       label: r[labelKey],
       amount: r.amount,
-    });
+    };
+    if (noteKey) rowData.note = r[noteKey] || "";
+    const row = sheet.addRow(rowData);
     row.getCell("icon").alignment = { horizontal: "center" };
     row.eachCell((cell) => {
       cell.border = { bottom: GRID_LINE };
     });
   });
 
+  const labelCol = sheet.getColumn("label").letter;
+  const amountCol = sheet.getColumn("amount").letter;
+
   const totalRowIdx = rows.length + 2;
-  sheet.getCell(`D${totalRowIdx}`).value = "Total";
-  sheet.getCell(`D${totalRowIdx}`).font = { bold: true };
-  sheet.getCell(`D${totalRowIdx}`).border = { top: BRAND_LINE };
-  const totalCell = sheet.getCell(`E${totalRowIdx}`);
+  sheet.getCell(`${labelCol}${totalRowIdx}`).value = "Total";
+  sheet.getCell(`${labelCol}${totalRowIdx}`).font = { bold: true };
+  sheet.getCell(`${labelCol}${totalRowIdx}`).border = { top: BRAND_LINE };
+  const totalCell = sheet.getCell(`${amountCol}${totalRowIdx}`);
   totalCell.value =
-    rows.length > 0 ? { formula: `SUM(E2:E${totalRowIdx - 1})` } : 0;
+    rows.length > 0
+      ? { formula: `SUM(${amountCol}2:${amountCol}${totalRowIdx - 1})` }
+      : 0;
   totalCell.font = { bold: true };
   totalCell.border = { top: BRAND_LINE };
 
@@ -192,7 +209,7 @@ exports.exportTransactionsExcel = async (req, res) => {
     });
 
     buildTransactionSheet(workbook, "Income", incomes, "source", "Source");
-    buildTransactionSheet(workbook, "Expenses", expenses, "category", "Category");
+    buildTransactionSheet(workbook, "Expenses", expenses, "category", "Category", "description");
 
     // ---- Combined, chronological sheet with a running balance ----
     // Compute the running balance in ascending date order (how the balance
@@ -202,6 +219,7 @@ exports.exportTransactionsExcel = async (req, res) => {
         date: i.date,
         icon: i.icon,
         label: i.source,
+        note: "",
         type: "Income",
         amount: i.amount,
       })),
@@ -209,6 +227,7 @@ exports.exportTransactionsExcel = async (req, res) => {
         date: e.date,
         icon: e.icon,
         label: e.category,
+        note: e.description || "",
         type: "Expense",
         amount: -e.amount,
       })),
@@ -227,6 +246,7 @@ exports.exportTransactionsExcel = async (req, res) => {
       { header: "Type", key: "type", width: 12 },
       { header: "Icon", key: "icon", width: 8 },
       { header: "Description", key: "label", width: 26 },
+      { header: "Notes", key: "note", width: 28 },
       { header: "Amount", key: "amount", width: 16 },
       { header: "Balance", key: "balance", width: 16 },
     ];
@@ -237,6 +257,7 @@ exports.exportTransactionsExcel = async (req, res) => {
         type: t.type,
         icon: t.icon || "",
         label: t.label,
+        note: t.note || "",
         amount: t.amount,
         balance: t.balance,
       });
@@ -378,7 +399,10 @@ const buildYearSummarySheet = (workbook, year, monthlyTotals) => {
 // with its own total row.
 const buildMonthReportSheet = (workbook, year, month, expenses, incomes, budgets) => {
   const sheet = workbook.addWorksheet(`${MONTH_NAMES[month - 1]} ${year}`);
-  sheet.columns = [{ width: 14 }, { width: 10 }, { width: 26 }, { width: 16 }];
+  // 5 columns wide so the Expenses table (Date, Icon, Category, Description,
+  // Amount) fits; the narrower Income and Budget vs Actual tables below
+  // just don't use that 5th column.
+  sheet.columns = [{ width: 14 }, { width: 10 }, { width: 26 }, { width: 28 }, { width: 16 }];
 
   let row = 1;
   const writeSectionHeader = (title) => {
@@ -404,21 +428,22 @@ const buildMonthReportSheet = (workbook, year, month, expenses, incomes, budgets
 
   // ---- Expenses ----
   writeSectionHeader("Expenses");
-  writeTableHeader(["Date", "Icon", "Category", "Amount"]);
+  writeTableHeader(["Date", "Icon", "Category", "Description", "Amount"]);
   expenses.forEach((e) => {
     sheet.getCell(row, 1).value = new Date(e.date).toLocaleDateString();
     sheet.getCell(row, 2).value = e.icon || "";
     sheet.getCell(row, 3).value = e.category;
-    const amountCell = sheet.getCell(row, 4);
+    sheet.getCell(row, 4).value = e.description || "";
+    const amountCell = sheet.getCell(row, 5);
     amountCell.value = e.amount;
     amountCell.numFmt = CURRENCY_FMT;
     row += 1;
   });
   if (expenses.length === 0) writeEmptyNote("No expenses recorded.");
   const totalExpense = expenses.reduce((sum, e) => sum + e.amount, 0);
-  sheet.getCell(row, 3).value = "Total Expenses";
-  sheet.getCell(row, 3).font = { bold: true };
-  const totalExpenseCell = sheet.getCell(row, 4);
+  sheet.getCell(row, 4).value = "Total Expenses";
+  sheet.getCell(row, 4).font = { bold: true };
+  const totalExpenseCell = sheet.getCell(row, 5);
   totalExpenseCell.value = totalExpense;
   totalExpenseCell.numFmt = CURRENCY_FMT;
   totalExpenseCell.font = { bold: true };
