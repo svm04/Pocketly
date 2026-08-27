@@ -12,8 +12,10 @@ const AddIncomeForm = ({ onAddIncome, initialData }) => {
     icon: initialData?.icon || "",
   });
 
+  // Functional update (see AddExpenseForm.jsx for why) — keeps this safe
+  // if a future change ever fires two handleChange calls back-to-back.
   const handleChange = (key, value) =>
-    setIncome({ ...income, [key]: value });
+    setIncome((prev) => ({ ...prev, [key]: value }));
 
   const handleSubmit = () => {
     onAddIncome(income);

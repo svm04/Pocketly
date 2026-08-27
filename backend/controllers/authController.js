@@ -7,6 +7,7 @@ const {
   hashToken,
 } = require("../utils/generateTokens");
 const sendEmail = require("../utils/sendEmail");
+const { isPlainString, isValidEmail, isStrongPassword } = require("../utils/validators");
 
 // Issues a fresh access + refresh token pair for a user, persisting a hash
 // of the refresh token so it can be validated (and revoked) later.
@@ -25,6 +26,18 @@ exports.registerUser = async (req, res) => {
   //validattion : missing fields
   if (!fullName || !email || !password) {
     return res.status(400).json({ message: 'Please provide all required fields' });
+  }
+  // Reject non-string payloads before they ever reach a query (defends
+  // against NoSQL-injection tricks like { "email": { "$gt": "" } }) and
+  // require a real-looking email + a password worth hashing.
+  if (!isPlainString(fullName) || !isValidEmail(email) || !isStrongPassword(password)) {
+    return res.status(400).json({
+      message: !isValidEmail(email)
+        ? "Please provide a valid email address"
+        : !isStrongPassword(password)
+        ? "Password must be at least 8 characters"
+        : "Invalid request",
+    });
   }
 
   try {
@@ -61,6 +74,11 @@ exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ message: 'Please provide email and password' });
+  }
+  // Same NoSQL-injection guard as registerUser — email/password must be
+  // plain strings before they can reach a Mongoose query.
+  if (!isPlainString(email) || !isPlainString(password)) {
+    return res.status(400).json({ message: 'Invalid email or password' });
   }
   try {
     const user = await User.findOne({ email });
@@ -100,7 +118,7 @@ exports.getUserInfo = async (req, res) => {
 exports.refreshAccessToken = async (req, res) => {
   const { refreshToken } = req.body;
 
-  if (!refreshToken) {
+  if (!refreshToken || !isPlainString(refreshToken)) {
     return res.status(401).json({ message: "Refresh token is required" });
   }
 
@@ -146,8 +164,8 @@ exports.logoutUser = async (req, res) => {
 exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
 
-  if (!email) {
-    return res.status(400).json({ message: "Please provide an email address" });
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).json({ message: "Please provide a valid email address" });
   }
 
   const genericResponse = {
@@ -231,7 +249,7 @@ exports.changePassword = async (req, res) => {
         .status(400)
         .json({ message: "Please provide your current and new password" });
     }
-    if (newPassword.length < 8) {
+    if (!isPlainString(currentPassword) || !isStrongPassword(newPassword)) {
       return res.status(400).json({ message: "New password must be at least 8 characters" });
     }
 
@@ -253,7 +271,7 @@ exports.resetPassword = async (req, res) => {
   const { token } = req.params;
   const { password } = req.body;
 
-  if (!password || password.length < 8) {
+  if (!isStrongPassword(password)) {
     return res
       .status(400)
       .json({ message: "Password must be at least 8 characters" });

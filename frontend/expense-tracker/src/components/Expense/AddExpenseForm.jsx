@@ -14,8 +14,16 @@ const AddExpenseForm = ({ onAddExpense, initialData }) => {
     icon: initialData?.icon || "",
   });
 
+  // Functional update — not { ...expense, [key]: value }. CategoryPicker's
+  // onSelect fires onChange(category) and onSelectIcon(icon) back-to-back
+  // in the same event, and both calls closed over the same stale `expense`
+  // from render time; the second call's spread clobbered the first one's
+  // change, so the category name silently reverted right after being set
+  // (you'd only see it "stick" on a second selection, once the icon was
+  // already filled and its update no longer fired). Reading off `prev`
+  // instead makes each update build on the one right before it.
   const handleChange = (key, value) =>
-    setExpense({ ...expense, [key]: value });
+    setExpense((prev) => ({ ...prev, [key]: value }));
 
   const handleSubmit = () => {
     onAddExpense(expense);

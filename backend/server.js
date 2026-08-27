@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const path = require("path");
 const cron = require("node-cron");
 const connectDB = require("./config/db");
@@ -19,6 +20,23 @@ const { backfillCategoryWhitespace } = require("./controllers/expenseController"
 const { catchUpMonthlyRollover } = require("./controllers/monthlyRolloverController");
 
 const app = express();
+
+// Render sits behind a reverse proxy, so without this Express sees every
+// request as coming from the proxy's own IP — which would make
+// express-rate-limit (see authRoutes.js) count all requests as one client
+// instead of limiting per real visitor.
+app.set("trust proxy", 1);
+
+// Baseline HTTP security headers (X-Content-Type-Options, HSTS, etc).
+// crossOriginResourcePolicy is relaxed to "cross-origin" because uploaded
+// profile pictures are served from here but rendered on the Vercel-hosted
+// frontend (a different origin) — the default "same-origin" policy would
+// silently block the browser from loading them.
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 //Middleware for CORS
 app.use(

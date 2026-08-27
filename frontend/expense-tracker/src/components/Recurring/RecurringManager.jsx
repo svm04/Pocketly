@@ -43,7 +43,9 @@ const RecurringManager = ({ isOpen, onClose, type }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  const handleChange = (key, value) => setForm({ ...form, [key]: value });
+  // Functional update (see AddExpenseForm.jsx for why) — keeps this safe
+  // if a future change ever fires two handleChange calls back-to-back.
+  const handleChange = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const handleAdd = async () => {
     if (!form.title.trim()) {

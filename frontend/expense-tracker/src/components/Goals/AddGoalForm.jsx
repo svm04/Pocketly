@@ -14,7 +14,9 @@ const AddGoalForm = ({ onAddGoal, initialData }) => {
     icon: initialData?.icon || "",
   });
 
-  const handleChange = (key, value) => setGoal({ ...goal, [key]: value });
+  // Functional update (see AddExpenseForm.jsx for why) — keeps this safe
+  // if a future change ever fires two handleChange calls back-to-back.
+  const handleChange = (key, value) => setGoal((prev) => ({ ...prev, [key]: value }));
 
   return (
     <div>

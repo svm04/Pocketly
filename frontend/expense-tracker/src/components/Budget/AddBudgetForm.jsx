@@ -12,7 +12,11 @@ const AddBudgetForm = ({ onAddBudget, initialData }) => {
     icon: initialData?.icon || "",
   });
 
-  const handleChange = (key, value) => setBudget({ ...budget, [key]: value });
+  // Functional update, not { ...budget, [key]: value } — see the matching
+  // comment in AddExpenseForm.jsx for why (CategoryPicker fires onChange
+  // and onSelectIcon back-to-back off the same stale closure, so the
+  // second call was clobbering the first).
+  const handleChange = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
   return (
     <div>
