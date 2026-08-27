@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Input from "../Inputs/Input";
 import CategoryPicker from "../Inputs/CategoryPicker";
 import EmojiPickerPopup from "../EmojiPickerPopup";
@@ -18,18 +18,28 @@ const AddBudgetForm = ({ onAddBudget, initialData }) => {
   // second call was clobbering the first).
   const handleChange = (key, value) => setBudget((prev) => ({ ...prev, [key]: value }));
 
+  // Tracks whether the current icon was picked by hand (via the emoji
+  // picker) rather than auto-filled from a category match — see the
+  // matching comment in AddExpenseForm.jsx. Keeps the icon in sync with
+  // whichever category is picked, switch after switch, unless the user
+  // deliberately chose their own icon.
+  const iconManuallySetRef = useRef(false);
+
   return (
     <div>
       <EmojiPickerPopup
         icon={budget.icon}
-        onSelect={(selectedIcon) => handleChange("icon", selectedIcon)}
+        onSelect={(selectedIcon) => {
+          iconManuallySetRef.current = true;
+          handleChange("icon", selectedIcon);
+        }}
       />
 
       <CategoryPicker
         value={budget.category}
         onChange={(value) => handleChange("category", value)}
         onSelectIcon={(icon) => {
-          if (!budget.icon) handleChange("icon", icon);
+          if (!iconManuallySetRef.current) handleChange("icon", icon);
         }}
         label="Category"
         placeholder="Groceries, Rent, Entertainment..."

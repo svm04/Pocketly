@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Input from "../Inputs/Input";
 import CategoryPicker from "../Inputs/CategoryPicker";
 import EmojiPickerPopup from "../EmojiPickerPopup";
@@ -25,6 +25,14 @@ const AddExpenseForm = ({ onAddExpense, initialData }) => {
   const handleChange = (key, value) =>
     setExpense((prev) => ({ ...prev, [key]: value }));
 
+  // Tracks whether the current icon was picked by hand (via the emoji
+  // picker) rather than auto-filled from a category match. Category
+  // selection keeps the icon in sync with whichever category you pick —
+  // switching from "Food" to "Groceries" swaps the icon too — but once
+  // you deliberately choose your own icon, further category changes leave
+  // it alone instead of overwriting your choice.
+  const iconManuallySetRef = useRef(false);
+
   const handleSubmit = () => {
     onAddExpense(expense);
   };
@@ -33,16 +41,19 @@ const AddExpenseForm = ({ onAddExpense, initialData }) => {
     <div>
       <EmojiPickerPopup
         icon={expense.icon}
-        onSelect={(selectedIcon) => handleChange("icon", selectedIcon)}
+        onSelect={(selectedIcon) => {
+          iconManuallySetRef.current = true;
+          handleChange("icon", selectedIcon);
+        }}
       />
 
       <CategoryPicker
         value={expense.category}
         onChange={(value) => handleChange("category", value)}
         onSelectIcon={(icon) => {
-          // Only auto-fill the icon if one hasn't been picked already, so
-          // this never clobbers a deliberate manual choice.
-          if (!expense.icon) handleChange("icon", icon);
+          // Keep the icon synced to whichever category is picked, unless
+          // the icon was deliberately hand-picked (see the ref above).
+          if (!iconManuallySetRef.current) handleChange("icon", icon);
         }}
         label="Category"
         placeholder="Rent, Groceries, etc"
