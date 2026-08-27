@@ -1,37 +1,45 @@
-// Best-effort email sender. If EMAIL_USER/EMAIL_PASS aren't configured in
-// .env, this just logs the email to the console instead of throwing, so the
-// password-reset flow still works end-to-end in local development without
-// needing a real mail provider set up.
+// Best-effort email sender. Sends via Brevo's REST API over HTTPS rather
+// than raw SMTP — Render's free tier blocks outbound traffic on SMTP ports
+// (25/465/587) as of Sept 2025, so a nodemailer/SMTP transporter just hangs
+// until it times out there. Going over HTTPS (port 443, same as any normal
+// API call) sidesteps that entirely and works on the free tier.
+//
+// If BREVO_API_KEY/EMAIL_FROM aren't configured in .env, this just logs the
+// email to the console instead of throwing, so the password-reset flow
+// still works end-to-end in local development without a real provider set
+// up.
 const sendEmail = async ({ to, subject, text, html }) => {
-  const { EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_PORT } = process.env;
+  const { BREVO_API_KEY, EMAIL_FROM, EMAIL_FROM_NAME } = process.env;
 
-  if (!EMAIL_USER || !EMAIL_PASS) {
+  if (!BREVO_API_KEY || !EMAIL_FROM) {
     console.log(
-      "\n[sendEmail] No EMAIL_USER/EMAIL_PASS configured in .env — printing email instead of sending:\n" +
+      "\n[sendEmail] No BREVO_API_KEY/EMAIL_FROM configured in .env — printing email instead of sending:\n" +
         `To: ${to}\nSubject: ${subject}\n${text}\n`
     );
     return { sent: false, reason: "not_configured" };
   }
 
   try {
-    // Lazy-require so the app doesn't hard-fail if nodemailer isn't installed
-    // yet in an environment that never triggers this path.
-    const nodemailer = require("nodemailer");
-
-    const transporter = nodemailer.createTransport({
-      host: EMAIL_HOST || "smtp.gmail.com",
-      port: Number(EMAIL_PORT) || 465,
-      secure: true,
-      auth: { user: EMAIL_USER, pass: EMAIL_PASS },
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": BREVO_API_KEY,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        sender: { email: EMAIL_FROM, name: EMAIL_FROM_NAME || "Pocketly" },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+        textContent: text,
+      }),
     });
 
-    await transporter.sendMail({
-      from: EMAIL_USER,
-      to,
-      subject,
-      text,
-      html,
-    });
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Brevo API responded ${response.status}: ${body}`);
+    }
 
     return { sent: true };
   } catch (error) {
